@@ -70,3 +70,14 @@ class svm_model:
         with tf.Session() as sess:  
             result = sess.run(self.prediction,feed_dict={self.batch_x:data_x,self.w:self.w_model,self.b:self.b_model})
         return result.reshape(-1,1)
+def increase_dims(data):
+    _,dim0=data.shape
+    k=0
+    lookup_class=dict()
+    for i in range(dim0-1):
+        for j in range(i+1,dim0):
+            lookup_class[k]=[i,j]
+            k += 1
+    #print([data]+[data[:,lookup_class[i][0]]*data[:,lookup_class[i][1]] for i in range(dim0*(dim0-1)//2)])
+    result=np.hstack([data]+[(data[:,lookup_class[i][0]]*data[:,lookup_class[i][1]]).reshape(-1,1) for i in range(dim0*(dim0-1)//2)])
+    return result
