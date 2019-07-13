@@ -12,6 +12,6 @@ train_x=increase_dims(train_x)
 
 svm = svm_model(number_of_classes,train_x.shape[1],learning_rate,regularization)
 
-svm.fit(data_x,data_y,iterations)
+svm.fit(train_x,train_y,iterations)
 
 svm.predict(test_x)
