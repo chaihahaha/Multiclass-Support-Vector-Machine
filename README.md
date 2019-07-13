@@ -1,0 +1,15 @@
+# Multiclass Support Vector Machine Tensorflow
+
+This is a multiclass SVM implmented on Tensorflow by Shitong CHAI in 2019/07/13. Copyright Reserved.
+
+### Use increase_dims() to increase the dimension of input features
+
+### Example
+
+train_x=increase_dims(train_x)
+
+svm = svm_model(number_of_classes,train_x.shape[1],learning_rate,regularization)
+
+svm.fit(data_x,data_y,iterations)
+
+svm.predict(test_x)
