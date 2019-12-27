@@ -1,6 +1,6 @@
 # Multiclass Support Vector Machine Tensorflow
 
-This is a multiclass SVM implmented on Tensorflow by Shitong CHAI in 2019/07/13. Copyright Reserved.
+This is a multiclass SVM implmented on Tensorflow by Shitong CHAI. Copyright Reserved.
 
 ### Use increase_dims() to increase the dimension of input features
 
