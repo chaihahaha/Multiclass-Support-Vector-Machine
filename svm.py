@@ -11,13 +11,12 @@ class svm_model:
         self.w=[]
         self.b=[]
         self.logit=[]
-        self.logit_tmp=[]
         self.loss=[]
         #prediction=[]
         self.correct_logit=[]
         self.lookup_class=dict()
-        self.w_model=np.random.uniform(0,1,(self.ncr(n_class,2), dimension)).astype(np.float32)
-        self.b_model=np.random.uniform(0,1,(self.ncr(n_class,2),1)).astype(np.float32)
+        self.w_model=np.random.normal(loc=0,scale=1,size=(self.ncr(n_class,2), dimension))
+        self.b_model=np.random.normal(loc=0,scale=1,size=(self.ncr(n_class,2),1))
         self.lookup_matrix=np.zeros((n_class, self.ncr(n_class,2)),dtype=np.float32)
         self.batch_x=tf.placeholder(tf.float32,shape=(None,dimension),name="batch_x")
         self.batch_y=tf.placeholder(tf.float32,shape=(None,1),name="batch_y")
@@ -40,14 +39,19 @@ class svm_model:
 
         
         for i in range(self.ncr(n_class,2)):
-            idx=tf.where(tf.keras.backend.any(tf.equal(self.batch_y,self.lookup_class[i]),1)) # tf.where and tf.gather_nd is equivalent to a[condition is true]
-            self.logit.append(tf.matmul(tf.reshape(self.w[i,:],(1,dimension)), tf.gather_nd(self.batch_x, idx), transpose_b=True) + self.b[i,:])
-            self.logit_tmp.append(tf.tanh(self.logit[i]))
-            self.correct_logit.append(self.zonp(tf.cast(tf.equal(tf.gather_nd(self.batch_y, idx),self.lookup_class[i][0]),tf.float32)))
-            self.batch_class_size.append(tf.cast(tf.shape(self.correct_logit[i])[0],tf.float32))
-            self.loss.append(tf.maximum(0.0,1-tf.matmul(self.logit_tmp[i],self.correct_logit[i])/self.batch_class_size[i]) + regularization * tf.norm(self.w[i,:], 2))
-
-        self.prediction = tf.argmax(tf.matmul(self.lookup_matrix, tf.tanh(tf.matmul(self.w, self.batch_x, transpose_b=True) + self.b)),axis=0)
+            # idx is the index of all the samples svm i concerns
+            idx=tf.where(tf.keras.backend.any(tf.equal(self.batch_y,self.lookup_class[i]),1)) # idx=tf.where[condition is true] and tf.gather_nd(a,idx) is equivalent to a[condition is true]
+            self.logit.append(tf.tanh(tf.matmul(tf.reshape(self.w[i,:],(1,dimension)), tf.gather_nd(self.batch_x, idx), transpose_b=True)
+                                      + self.b[i,:])) # 1 x n
+            self.correct_logit.append(self.zonp(tf.cast(
+                tf.equal(tf.gather_nd(self.batch_y, idx),self.lookup_class[i][0]),
+                tf.float32)
+                                               )
+                                     )
+            self.batch_class_size.append(tf.cast(tf.shape(self.correct_logit[i])[0],tf.float32)) # the number of samples one svm concerns
+            self.loss.append(tf.reduce_sum(tf.maximum(0.0,1-tf.matmul(self.logit[i],self.correct_logit[i])))
+                             /self.batch_class_size[i]
+                             + regularization * tf.norm(self.w[i,:], 2))
         self.total_loss = sum(self.loss)
         self.opt = tf.train.RMSPropOptimizer(learning_rate).minimize(self.total_loss)
         
@@ -59,24 +63,32 @@ class svm_model:
     def zonp(self,zero_one):
         return 2*zero_one-1
 
-    def fit(self,data_x,data_y,iter_time=1000):
+    def fit(self,data_x,data_y,iter_time=1000, batch_size=1000):
         with tf.Session() as sess:
             sess.run(tf.global_variables_initializer())
             sess.run([tf.assign(self.w,self.w_model),tf.assign(self.b,self.b_model)])
+            counter=0
+            total = data_y.shape[0]
             for _ in range(iter_time):
-                _,loss_val,w_model,b_model = sess.run([self.opt,self.total_loss,self.w,self.b], feed_dict={self.batch_x:data_x,self.batch_y:data_y})
-                print(loss_val)
-            #print(sess.run(self.batch_class_size, feed_dict={self.batch_y:data_y}))
-            #print(sess.run(self.logit_tmp, feed_dict={self.batch_x:data_x,self.batch_y:data_y}))
+                lower = max(0,        counter   *batch_size % total)
+                upper = min(total, (counter+1)*batch_size % total)
+                if lower>=upper:
+                    counter +=1
+                    lower = max(0,        counter   *batch_size % total)
+                    upper = min(total, (counter+1)*batch_size % total)
+                _,loss_val = sess.run([self.opt,self.total_loss], feed_dict={self.batch_x:data_x[lower:upper],self.batch_y:data_y[lower:upper]})
+                counter += 1
+                print("iteration:"+str(counter)+" loss:"+str(loss_val))
+            w_model,b_model = sess.run([self.w,self.b])
+#             print(sess.run(self.batch_class_size, feed_dict={self.batch_y:data_y}))
+#             print(sess.run(self.logit, feed_dict={self.batch_x:data_x,self.batch_y:data_y}))
         self.w_model = w_model
         self.b_model = b_model
         
         return w_model,b_model
+    
     def predict(self,data_x):
-        with tf.Session() as sess:  
-            sess.run(tf.global_variables_initializer())
-            sess.run([tf.assign(self.w,self.w_model),tf.assign(self.b,self.b_model)])
-            result = sess.run(self.prediction,feed_dict={self.batch_x:data_x})
+        result = np.argmax(np.matmul(svm.lookup_matrix, np.tanh(np.matmul(svm.w_model,data_x.T)) ),axis=0)
         return result.reshape(-1,1)
     
     
