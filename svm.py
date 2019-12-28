@@ -99,7 +99,7 @@ class svm_model:
         return w_model,b_model
     
     def predict(self,data_x):
-        result = np.argmax(np.matmul(svm.lookup_matrix, np.tanh(np.matmul(svm.w_model,data_x.T)) ),axis=0)
+        result = np.argmax(np.matmul(self.lookup_matrix, np.tanh(np.matmul(self.w_model,data_x.T)) ),axis=0)
         return result.reshape(-1,1)
     
     def save(self, file_name):
