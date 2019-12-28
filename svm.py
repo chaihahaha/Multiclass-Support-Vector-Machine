@@ -70,6 +70,7 @@ class svm_model:
         numer = reduce(op.mul, range(n, n-r, -1), 1)
         denom = reduce(op.mul, range(1, r+1), 1)
         return numer // denom
+    
     def zonp(self,zero_one):
         return 2*zero_one-1
 
@@ -100,6 +101,18 @@ class svm_model:
     def predict(self,data_x):
         result = np.argmax(np.matmul(svm.lookup_matrix, np.tanh(np.matmul(svm.w_model,data_x.T)) ),axis=0)
         return result.reshape(-1,1)
+    
+    def save(self, file_name):
+        with open(file_name,"wb") as f:
+            pickle.dump((self.w_model,self.b_model), f)
+    def load(self, file_name):
+        with open(file_name,"rb") as f:
+            w_tmp, b_tmp = pickle.load(f)
+            if w_tmp.shape==(self.ncr(self.n_class,2), self.dimension) and b_tmp.shape == (self.ncr(self.n_class,2), 1):
+                self.w_model, self.b_model = w_tmp, b_tmp
+                print("Successfully loaded!")
+            else:
+                print("Loading failed! Dimension doesn't fit!")
     
     
 def increase_dims(data):
