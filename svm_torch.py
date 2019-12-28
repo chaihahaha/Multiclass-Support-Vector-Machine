@@ -1,14 +1,15 @@
 import torch
+import numpy as np
 class svm_model_torch:
     def __init__(self, m, C, n_class):
         self.n_svm = n_class * (n_class - 1)//2
-        self.m = m # of samples
+        self.m = m # number of samples
         self.C = C # box constraint
         
         # multiplier
-        self.a = torch.rand((self.n_svm,self.m), 
-                            #device=torch.device("cuda"), 
-                            requires_grad=True) * self.C
+        self.a = torch.rand((self.n_svm,self.m)) * self.C
+        # bias
+        self.b = torch.rand((self.n_svm,1))
         # kernel function
         self.kernel = lambda x,y: torch.sum(x*y)
         self.n_class = n_class
@@ -37,6 +38,7 @@ class svm_model_torch:
                         self.lookup_matrix[i,j]=-1.0
                         
     def fit(self, x_np, y_multiclass_np, iterations=10, kernel=lambda x,y: torch.sum(x*y)):
+        # use SMO algorithm to fit
         x = torch.from_numpy(x_np)
         y_multiclass = torch.from_numpy(y_multiclass_np)
         self.x = x
@@ -68,6 +70,18 @@ class svm_model_torch:
                         a2_new = a2_old + delta
                         self.a[k,i+1] = torch.clamp(a2_new, L, H)
                         self.a[k, i] = a1_old - y1 * y2 * (a2_old - self.a[k,i+1])
+                        
+                        a1_new = self.a[k,i]
+                        a2_new = self.a[k,i+1]
+                        b1 = y1 - self.g_k_nobias(k, x1, x, y)
+                        b2 = y2 - self.g_k_nobias(k, x2, x, y)
+                        if 0<a1_new<self.C:
+                            self.b[k,0] = b1
+                        elif 0<a2_new<self.C:
+                            self.b[k,0] = b2
+                        else:
+                            self.b[k,0] = (b1+b2)/2
+                        
                 
     def predict(self,x_np):
         x = torch.from_numpy(x_np)
@@ -84,12 +98,15 @@ class svm_model_torch:
         # cast the label of dataset to the P/N/0 SVMk concerns
         return (y==self.lookup_class[k][0]).float() - (y==self.lookup_class[k][1]).float()
         
-    def g_k(self, k, xi, x, y):
+    def g_k_nobias(self, k, xi, x, y):
         # The prediction of SVMk
 #         y = self.cast(y_multiclass, k)
         a = self.a[k,:].view(-1,1)
         gx = (y * a) * self.kernel(xi, x) # kernel should broadcast xi [1,d] to [m,d]
         return torch.sum(gx)
+    
+    def g_k(self,k,xi,x,y):
+        return self.g_k_nobias(k,xi,x,y) + self.b[k,0]
     
     def error_k(self, k, xi, yi, x, y):
         return self.g_k(k,xi,x,y)-yi
