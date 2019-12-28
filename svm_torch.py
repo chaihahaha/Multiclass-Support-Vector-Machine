@@ -10,8 +10,8 @@ class svm_model_torch:
         self.a = torch.rand((self.n_svm,self.m)) * self.C
         # bias
         self.b = torch.rand((self.n_svm,1))
-        # kernel function
-        self.kernel = lambda x,y: torch.sum(x*y)
+        # kernel function  should broadcast xi [1,d] to [m,d] and get [m,1]
+        self.kernel = lambda x,y: torch.sum(x*y,1) 
         self.n_class = n_class
         
         # Binary setting for every SVM, 
@@ -37,7 +37,7 @@ class svm_model_torch:
                     else:
                         self.lookup_matrix[i,j]=-1.0
                         
-    def fit(self, x_np, y_multiclass_np, iterations=10, kernel=lambda x,y: torch.sum(x*y)):
+    def fit(self, x_np, y_multiclass_np, iterations=10, kernel=lambda x,y: torch.sum(x*y, 1)):
         # use SMO algorithm to fit
         x = torch.from_numpy(x_np)
         y_multiclass = torch.from_numpy(y_multiclass_np)
@@ -95,14 +95,16 @@ class svm_model_torch:
         return result.reshape(-1,1)
         
     def cast(self, y, k):
-        # cast the label of dataset to the P/N/0 SVMk concerns
+        # cast the multiclass label of dataset to 
+        # the pos/neg (with 0) where pos/neg are what SVMk concerns
         return (y==self.lookup_class[k][0]).float() - (y==self.lookup_class[k][1]).float()
         
     def g_k_nobias(self, k, xi, x, y):
         # The prediction of SVMk
 #         y = self.cast(y_multiclass, k)
         a = self.a[k,:].view(-1,1)
-        gx = (y * a) * self.kernel(xi, x) # kernel should broadcast xi [1,d] to [m,d]
+        gx = (y * a) * self.kernel(xi, x) 
+        print(torch.sum(gx))
         return torch.sum(gx)
     
     def g_k(self,k,xi,x,y):
@@ -110,4 +112,9 @@ class svm_model_torch:
     
     def error_k(self, k, xi, yi, x, y):
         return self.g_k(k,xi,x,y)-yi
+    
+    def get_w(self, k):
+        y = self.cast(self.y_multiclass, k)
+        a = self.a[k,:].view(-1,1)
+        return torch.sum(a*y*self.x,0).view(-1,1)
         
