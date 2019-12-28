@@ -11,7 +11,7 @@ class svm_model_torch:
         # bias
         self.b = torch.rand((self.n_svm,1))
         # kernel function  should broadcast xi [1,d] to [m,d] and get [m,1]
-        self.kernel = lambda x,y: torch.sum(x*y,1) 
+        self.kernel = lambda x,y: torch.sum(x*y,1,keepdim=True) 
         self.n_class = n_class
         
         # Binary setting for every SVM, 
@@ -37,7 +37,7 @@ class svm_model_torch:
                     else:
                         self.lookup_matrix[i,j]=-1.0
                         
-    def fit(self, x_np, y_multiclass_np, iterations=10, kernel=lambda x,y: torch.sum(x*y, 1)):
+    def fit(self, x_np, y_multiclass_np, iterations=10, kernel=lambda x,y: torch.sum(x*y, 1,keepdim=True)):
         # use SMO algorithm to fit
         x = torch.from_numpy(x_np)
         y_multiclass = torch.from_numpy(y_multiclass_np)
@@ -104,7 +104,7 @@ class svm_model_torch:
 #         y = self.cast(y_multiclass, k)
         a = self.a[k,:].view(-1,1)
         gx = (y * a) * self.kernel(xi, x) 
-        print(torch.sum(gx))
+        print(y.shape,a.shape,self.kernel(xi, x).shape)
         return torch.sum(gx)
     
     def g_k(self,k,xi,x,y):
