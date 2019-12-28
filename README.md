@@ -10,7 +10,7 @@ from svm import *
 import numpy as np
 from sklearn.decomposition import KernelPCA
 
-kpca = KernelPCA(kernel="rbf", fit_inverse_transform=True, gamma=10)
+kpca = KernelPCA(kernel="rbf", gamma=1)
 train_x = kpca.fit_transform(raw_X) # or train_x=increase_dims(raw_x)
 
 svm = svm_model(number_of_classes,train_x.shape[1],learning_rate,regularization)
@@ -18,4 +18,14 @@ svm = svm_model(number_of_classes,train_x.shape[1],learning_rate,regularization)
 svm.fit(train_x,train_y,iterations)
 
 svm.predict(test_x)
+```
+To save weights and load weights:
+```python
+svm.save("svm.pickle")
+```
+
+```python
+svm=svm_model(n_classes,dimension)
+svm.load("svm.pickle")
+
 ```
