@@ -49,40 +49,42 @@ class svm_model_torch:
         for iteration in range(iterations):
             for k in range(self.n_svm):
                 y = self.cast(y_multiclass, k)
-                for i in range(self.m - 1):
-                    y1 = y[i,0]
-                    y2 = y[i+1,0]
-                    x1 = x[i,:].view(1,-1)
-                    x2 = x[i+1,:].view(1,-1)
-                    a1_old = self.a[k,i]
-                    a2_old = self.a[k,i+1]
-                    if not (y1==0 or y2==0):
-                        if y1 != y2:
-                            H = min(self.C, (self.C + a2_old-a1_old).item())
-                            L = max(0, (a2_old-a1_old).item())
-                        else:
-                            H = min(self.C, (a2_old + a1_old).item())
-                            L = max(0, (a2_old + a1_old - self.C).item())
-                        
-                        E1 = self.error_k(k, x1, y1,x)
-                        E2 = self.error_k(k, x2, y2,x)
-                        dx = x1 - x2
-                        kappa = self.kernel(dx,dx)
-                        delta = y2 * (E1-E2)/kappa
-                        a2_new = a2_old + delta
-                        self.a[k,i+1] = torch.clamp(a2_new, L, H)
-                        self.a[k, i] = a1_old - y1 * y2 * (a2_old - self.a[k,i+1])
-                        
-                        a1_new = self.a[k,i]
-                        a2_new = self.a[k,i+1]
-                        b1 = y1 - self.g_k_nobias(k, x1, x)
-                        b2 = y2 - self.g_k_nobias(k, x2, x)
-                        if 0<a1_new<self.C:
-                            self.b[k,0] = b1
-                        elif 0<a2_new<self.C:
-                            self.b[k,0] = b2
-                        else:
-                            self.b[k,0] = (b1+b2)/2
+                index, _ = torch.where(y!=0)
+                for i in range(len(index)-1):
+                    y1 = y[index[i],0]
+                    y2 = y[index[i+1],0]
+                    x1 = x[index[i],:].view(1,-1)
+                    x2 = x[index[i+1],:].view(1,-1)
+                    a1_old = self.a[k,index[i]]
+                    a2_old = self.a[k,index[i+1]]
+
+                    if y1 != y2:
+                        H = min(self.C, (self.C + a2_old-a1_old).item())
+                        L = max(0, (a2_old-a1_old).item())
+                    else:
+                        H = min(self.C, (a2_old + a1_old).item())
+                        L = max(0, (a2_old + a1_old - self.C).item())
+
+                    E1 = self.error_k(k, x1, y1,x)
+                    E2 = self.error_k(k, x2, y2,x)
+                    dx = x1 - x2
+                    kappa = self.kernel(dx,dx)
+                    delta = y2 * (E1-E2)/kappa
+                    a2_new = a2_old + delta
+                    self.a[k,index[i+1]] = torch.clamp(a2_new, L, H)
+                    self.a[k, index[i]] = a1_old - y1 * y2 * (a2_old - self.a[k,index[i+1]])
+
+                    a1_new = self.a[k,index[i]]
+                    a2_new = self.a[k,index[i+1]]
+                    b1 = y1 - self.g_k_nobias(k, x1, x)
+                    b2 = y2 - self.g_k_nobias(k, x2, x)
+                    if 0<a1_new<self.C:
+                        self.b[k,0] = b1
+                    elif 0<a2_new<self.C:
+                        self.b[k,0] = b2
+                    else:
+                        self.b[k,0] = (b1+b2)/2
+
                         
                 
     def predict(self,x_np):
