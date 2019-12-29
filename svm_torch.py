@@ -10,7 +10,9 @@ class svm_model_torch:
         self.a = torch.rand((self.n_svm,self.m)) * self.C
         # bias
         self.b = torch.rand((self.n_svm,1))
+        
         # kernel function  should broadcast xi [1,d] to [m,d] and get [m,1]
+        # Example of poly kernel: lambda x,y: torch.sum(x*y,1,keepdim=True)**2
         self.kernel = lambda x,y: torch.sum(x*y,1,keepdim=True) 
         self.n_class = n_class
         
