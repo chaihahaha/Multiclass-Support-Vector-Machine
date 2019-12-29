@@ -6,7 +6,7 @@ This is a multiclass SVM implmented on Tensorflow by Shitong CHAI. Copyright Res
 
 ### Example of Tensorflow version
 ```python
-from svm import *
+from svm_tf import *
 import numpy as np
 from sklearn.decomposition import KernelPCA
 
