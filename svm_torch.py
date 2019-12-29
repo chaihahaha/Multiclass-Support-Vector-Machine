@@ -1,5 +1,6 @@
 import torch
 import numpy as np
+import time
 class svm_model_torch:
     def __init__(self, m, C, n_class):
         self.n_svm = n_class * (n_class - 1)//2
@@ -39,10 +40,13 @@ class svm_model_torch:
                     else:
                         self.lookup_matrix[i,j]=-1.0
                         
-    def fit(self, x_np, y_multiclass_np, iterations=10, kernel=lambda x,y: torch.matmul(x,y.T)):
+    def fit(self, x_np, y_multiclass_np, iterations=1, kernel=lambda x,y: torch.matmul(x,y.T)):
         # use SMO algorithm to fit
-        x = torch.from_numpy(x_np).float()
-        y_multiclass = torch.from_numpy(y_multiclass_np)
+        x = torch.from_numpy(x_np).float() if not torch.is_tensor(x_np) else x_np
+        y_multiclass = torch.from_numpy(y_multiclass_np) if not torch.is_tensor(y_multiclass_np) else y_multiclass_np
+        x=x.to(self.device)
+        y_multiclass=y_multiclass.to(self.device)
+        
         self.x = x
         self.y_multiclass = y_multiclass
         self.kernel = kernel
@@ -50,8 +54,10 @@ class svm_model_torch:
             for k in range(self.n_svm):
                 y = self.cast(y_multiclass, k)
                 index, _ = torch.where(y!=0)
-                for i in range(len(index)-1):
-                    
+                print("k=",k)
+                s = time.time()
+                traverse = [i for i in range(0, len(index)-1, 2)] + [len(index)-2]
+                for i in traverse:
                     y1 = y[index[i],0].clone()
                     y2 = y[index[i+1],0].clone()
                     x1 = x[index[i],:].clone().view(1,-1)
@@ -65,11 +71,10 @@ class svm_model_torch:
                     else:
                         H = max(min(self.C, (a2_old + a1_old).item()),0)
                         L = min(max(0, (a2_old + a1_old - self.C).item()),self.C)
-                    if L>H:
-                        print("Error: Lower > Upper")
-                        assert L<=H
+
                     E1 = self.error_k(k, x1, y1)
                     E2 = self.error_k(k, x2, y2)
+
                     dx = x1 - x2
                     kappa = self.kernel(dx,dx)
                     delta = y2 * (E1-E2)/kappa
@@ -92,15 +97,23 @@ class svm_model_torch:
                         self.b[k,0] = b2_new
                     if a1_new in [0,self.C] and a2_new in [0,self.C] and L!=H:
                         self.b[k,0] = (b1_new + b2_new)/2
+                t = time.time()
+                print(t-s)
                 
     def predict(self,x_np):
-        x = torch.from_numpy(x_np).float()
+        x = torch.from_numpy(x_np).float().to(self.device)
         n_x = x.shape[0]
-        k_predicts = torch.zeros((self.n_svm, n_x))
+        k_predicts = torch.zeros((self.n_svm, n_x),device=self.device)
         for k in range(self.n_svm):
             k_predicts[k,:] = self.g_k(k, x).view(1,-1)
         result = torch.argmax(torch.matmul(self.lookup_matrix, k_predicts ),axis=0)
-        return result.reshape(-1,1)
+        return result.reshape(-1,1).numpy()
+    
+    def to(self,device):
+        self.device = device
+        self.b = self.b.to(device)
+        self.a = self.a.to(device)
+        self.lookup_matrix = self.lookup_matrix.to(device)
         
     def cast(self, y, k):
         # cast the multiclass label of dataset to 
