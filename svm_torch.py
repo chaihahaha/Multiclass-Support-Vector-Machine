@@ -11,9 +11,9 @@ class svm_model_torch:
         # bias
         self.b = torch.rand((self.n_svm,1))
         
-        # kernel function  should broadcast xi [1,d] to [m,d] and get [m,1]
-        # Example of poly kernel: lambda x,y: torch.sum(x*y,1,keepdim=True)**2
-        self.kernel = lambda x,y: torch.sum(x*y,1,keepdim=True) 
+        # kernel function  should input x [n,d] y [m,d] output [n,m]
+        # Example of poly kernel: lambda x,y:  torch.matmul(x,y.T)**2
+        self.kernel = lambda x,y:  torch.matmul(x,y.T)
         self.n_class = n_class
         
         # Binary setting for every SVM, 
@@ -39,9 +39,9 @@ class svm_model_torch:
                     else:
                         self.lookup_matrix[i,j]=-1.0
                         
-    def fit(self, x_np, y_multiclass_np, iterations=10, kernel=lambda x,y: torch.sum(x*y, 1,keepdim=True)):
+    def fit(self, x_np, y_multiclass_np, iterations=10, kernel=lambda x,y: torch.matmul(x,y.T)):
         # use SMO algorithm to fit
-        x = torch.from_numpy(x_np)
+        x = torch.from_numpy(x_np).float()
         y_multiclass = torch.from_numpy(y_multiclass_np)
         self.x = x
         self.y_multiclass = y_multiclass
@@ -64,36 +64,32 @@ class svm_model_torch:
                     else:
                         H = min(self.C, (a2_old + a1_old).item())
                         L = max(0, (a2_old + a1_old - self.C).item())
-
-                    E1 = self.error_k(k, x1, y1,x)
-                    E2 = self.error_k(k, x2, y2,x)
+                    
+                    E1 = self.error_k(k, x1, y1)
+                    E2 = self.error_k(k, x2, y2)
                     dx = x1 - x2
                     kappa = self.kernel(dx,dx)
                     delta = y2 * (E1-E2)/kappa
+                    
                     a2_new = a2_old + delta
                     self.a[k,index[i+1]] = torch.clamp(a2_new, L, H)
                     self.a[k, index[i]] = a1_old - y1 * y2 * (a2_old - self.a[k,index[i+1]])
 
                     a1_new = self.a[k,index[i]]
                     a2_new = self.a[k,index[i+1]]
-                    b1 = y1 - self.g_k_nobias(k, x1, x)
-                    b2 = y2 - self.g_k_nobias(k, x2, x)
-                    if 0<a1_new<self.C:
-                        self.b[k,0] = b1
-                    elif 0<a2_new<self.C:
-                        self.b[k,0] = b2
-                    else:
-                        self.b[k,0] = (b1+b2)/2
-
-                        
+                    
+                    wTx1 = self.g_k_nobias(k, self.x)[y==-1]
+                    wTx2 = self.g_k_nobias(k, self.x)[y==1]
+                    self.b[k,0] = (torch.max(wTx1) if len(wTx1)!=0 else 0
+                              + torch.min(wTx2) if len(wTx2)!=0 else 0)/(-2.0)          
                 
     def predict(self,x_np):
-        x = torch.from_numpy(x_np)
+        x = torch.from_numpy(x_np).float()
         n_x = x.shape[0]
         k_predicts = torch.zeros((self.n_svm, n_x))
         for k in range(self.n_svm):
             for i in range(n_x):
-                k_predicts[k, i] = self.g_k(k, x[i,:].view(1,-1), self.x)
+                k_predicts[k, i] = self.g_k(k, x[i,:].view(1,-1))
         result = torch.argmax(torch.matmul(self.lookup_matrix, k_predicts ),axis=0)
         return result.reshape(-1,1)
         
@@ -102,18 +98,18 @@ class svm_model_torch:
         # the pos/neg (with 0) where pos/neg are what SVMk concerns
         return (y==self.lookup_class[k][0]).float() - (y==self.lookup_class[k][1]).float()
         
-    def g_k_nobias(self, k, xi, x):
-        # The prediction of SVMk
+    def g_k_nobias(self, k, xi):
+        # The prediction of SVMk, xi[1,d]
         y = self.cast(self.y_multiclass, k)
         a = self.a[k,:].view(-1,1)
-        gx = (y * a) * self.kernel(xi, x) 
-        return torch.sum(gx)
+        gx =  torch.matmul(self.kernel(xi, self.x), (y * a))
+        return gx
     
-    def g_k(self,k,xi,x):
-        return self.g_k_nobias(k,xi,x) + self.b[k,0]
+    def g_k(self,k,xi):
+        return self.g_k_nobias(k,xi) + self.b[k,0].view(1,1)
     
-    def error_k(self, k, xi, yi, x):
-        return self.g_k(k,xi,x)-yi
+    def error_k(self, k, xi, yi):
+        return self.g_k(k,xi)-yi.view(1,1)
     
     def get_w(self, k):
         y = self.cast(self.y_multiclass, k)
