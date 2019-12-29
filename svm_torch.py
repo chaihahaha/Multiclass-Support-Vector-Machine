@@ -146,4 +146,8 @@ class svm_model_torch:
                 sk += "{:.3f}".format(w[i,0].item()) + ' x' + "{:d}".format(i) +' + '
             sk += "{:.3f}".format(self.b[k,0].item())
             print(sk)
+            
+    def get_avg_perc_supp_vec(self):
+        # the percentage of support vectors, predict error shouldn't be greater than it
+        return torch.sum(0.0<self.a<self.C).float().item()/(self.n_svm*self.m)
         
