@@ -31,6 +31,7 @@ svm.load("svm.pickle")
 ```
 
 ### Example of pytorch version
+```python
 import numpy as np
 from svm_torch import *
 data_x = np.array([[-1,0],[1,0],[0,1]])
@@ -43,3 +44,4 @@ svm.fit(data_x,data_y,1)
 print(svm.predict(data_x))
 svm.get_svms()
 print(svm.a)
+```
