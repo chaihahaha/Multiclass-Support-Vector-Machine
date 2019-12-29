@@ -149,5 +149,5 @@ class svm_model_torch:
             
     def get_avg_perc_supp_vec(self):
         # the percentage of support vectors, predict error shouldn't be greater than it
-        return torch.sum(0.0<self.a<self.C).float().item()/(self.n_svm*self.m)
+        return torch.sum((0.0<self.a) & (self.a<self.C)).float().item()/(self.n_svm*self.m)
         
