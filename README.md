@@ -4,7 +4,7 @@ This is a multiclass SVM implmented on Tensorflow by Shitong CHAI. Copyright Res
 
 ### Use increase_dims() to increase the dimension of input features
 
-### Example
+### Example of Tensorflow version
 ```python
 from svm import *
 import numpy as np
@@ -29,3 +29,17 @@ svm=svm_model(n_classes,dimension)
 svm.load("svm.pickle")
 
 ```
+
+### Example of pytorch version
+import numpy as np
+from svm_torch import *
+data_x = np.array([[-1,0],[1,0],[0,1]])
+data_y = np.array([[0],[1],[2]])
+m = len(data_x)
+c = len(np.unique(data_y))
+svm = svm_model_torch(m,1,c)
+svm.fit(data_x,data_y,1)
+
+print(svm.predict(data_x))
+svm.get_svms()
+print(svm.a)
