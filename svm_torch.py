@@ -1,6 +1,5 @@
 import torch
 import numpy as np
-import time
 from random import shuffle
 class svm_model_torch:
     def __init__(self, m, C, n_class):
@@ -74,14 +73,15 @@ class svm_model_torch:
                     x2 = x[index[i+1],:].view(1,-1)
                     a1_old = a[k,index[i]].clone()
                     a2_old = a[k,index[i+1]].clone()
+                    
                     logit = (y1 != y2).float()
                     H = torch.min(self.C, logit*self.C + a2_old + (1-2*logit)*a1_old)
                     L = torch.max(zero, a2_old+(1-2*logit)*a1_old + (logit-1)*self.C)        
-                    E1 =  torch.matmul(kernel(x1,x), (y * a[k,:].view(-1,1))) + b[k,0]-y1
-                    E2 = torch.matmul(kernel(x2,x), (y * a[k,:].view(-1,1))) + b[k,0]-y2
-                    
+                    E1 =  self.g_k(k, x1) - y1
+                    E2 =  self.g_k(k, x2) - y2
                     a2_new = torch.clamp(a2_old + y2 * (E1-E2)/self.kernel(x1 - x2,x1 - x2), min=L, max=H)
                     a[k,index[i+1]] = a2_new
+                    
                     a1_new = a1_old - y1 * y2 * (a2_new - a2_old)
                     a[k, index[i]] = a1_new
                     
@@ -97,7 +97,6 @@ class svm_model_torch:
                         b[k,0] = b2_new
                     if ((a1_new ==zero) |(a1_new ==self.C)) & ((a2_new ==zero) |(a2_new==self.C)) & (L!=H):
                         b[k,0] = (b1_new + b2_new)/two
-
                 
     def predict(self,x_np):
         x = torch.from_numpy(x_np).float().to(self.device)
@@ -129,11 +128,6 @@ class svm_model_torch:
         wTx =  torch.matmul(self.kernel(xi, self.x), (y * a))
         return wTx + self.b[k,0].view(1,1)
     
-    def error_k(self, k, xi, yi):
-        y = self.cast(self.y_multiclass, k)
-        a = self.a[k,:].view(-1,1)
-        wTx =  torch.matmul(self.kernel(xi, self.x), (y * a))
-        return wTx + self.b[k,0].view(1,1)-yi.view(1,1)
     
     def get_w(self, k):
         y = self.cast(self.y_multiclass, k)
@@ -149,7 +143,8 @@ class svm_model_torch:
             sk += "{:.3f}".format(self.b[k,0].item())
             print(sk)
             
-    def get_avg_perc_supp_vec(self):
-        # the percentage of support vectors, predict error shouldn't be greater than it
+    def get_avg_pct_spt_vec(self):
+        # the average percentage of support vectors, 
+        # test error shouldn't be greater than it if traing converge
         return torch.sum((0.0<self.a) & (self.a<self.C)).float().item()/(self.n_svm*self.m)
         
