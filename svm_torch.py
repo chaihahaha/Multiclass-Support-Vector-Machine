@@ -70,15 +70,12 @@ class svm_model_torch:
                     x2 = x[index[i+1],:].view(1,-1)
                     a1_old = a[k,index[i]].clone()
                     a2_old = a[k,index[i+1]].clone()
-                    if y1 != y2:
-                        H = torch.min(self.C, self.C + a2_old-a1_old)
-                        L = torch.max(zero, a2_old-a1_old)
-                    else:
-                        H = torch.min(self.C, a2_old + a1_old)
-                        L = torch.max(zero, a2_old + a1_old - self.C)
+                    logit = (y1 != y2).float()
+                    H = torch.min(self.C, logit*self.C + a2_old + (1-2*logit)*a1_old)
+                    L = torch.max(zero, a2_old+(1-2*logit)*a1_old + (logit-1)*self.C)        
 
-                    E1 = self.error_k(k, x1, y1)
-                    E2 = self.error_k(k, x2, y2)
+                    E1 =  torch.matmul(torch.matmul(x1,x.T)**2, (y * a[k,:].view(-1,1))) + b[k,0]-y1
+                    E2 = torch.matmul(torch.matmul(x2,x.T)**2, (y * a[k,:].view(-1,1))) + b[k,0]-y2
 
                     a2_new = torch.clamp(a2_old + y2 * (E1-E2)/self.kernel(x1 - x2,x1 - x2), min=L, max=H)
                     a[k,index[i+1]] = a2_new
@@ -122,18 +119,19 @@ class svm_model_torch:
         # the pos/neg (with 0) where pos/neg are what SVMk concerns
         return (y==self.lookup_class[k, 0]).float() - (y==self.lookup_class[k, 1]).float()
         
-    def g_k_nobias(self, k, xi):
+    
+    def g_k(self,k,xi):
         # The prediction of SVMk, xi[1,d]
         y = self.cast(self.y_multiclass, k)
         a = self.a[k,:].view(-1,1)
         wTx =  torch.matmul(self.kernel(xi, self.x), (y * a))
-        return wTx
-    
-    def g_k(self,k,xi):
-        return self.g_k_nobias(k,xi) + self.b[k,0].view(1,1)
+        return wTx + self.b[k,0].view(1,1)
     
     def error_k(self, k, xi, yi):
-        return self.g_k(k,xi)-yi.view(1,1)
+        y = self.cast(self.y_multiclass, k)
+        a = self.a[k,:].view(-1,1)
+        wTx =  torch.matmul(self.kernel(xi, self.x), (y * a))
+        return wTx + self.b[k,0].view(1,1)-yi.view(1,1)
     
     def get_w(self, k):
         y = self.cast(self.y_multiclass, k)
