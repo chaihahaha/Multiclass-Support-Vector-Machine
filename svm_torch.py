@@ -1,12 +1,14 @@
 import torch
 import numpy as np
 import time
+from random import shuffle
 class svm_model_torch:
     def __init__(self, m, C, n_class):
         self.n_svm = n_class * (n_class - 1)//2
         self.m = m # number of samples
         self.C = torch.tensor(C,dtype=torch.float32) # box constraint
         self.n_class = n_class
+        self.device = "cpu"
         
         # multiplier
         self.a = torch.zeros((self.n_svm,self.m)) # SMO works only when a is initialized to 0
@@ -48,7 +50,6 @@ class svm_model_torch:
         y_multiclass = torch.from_numpy(y_multiclass_np) if not torch.is_tensor(y_multiclass_np) else y_multiclass_np
         x=x.to(self.device)
         y_multiclass=y_multiclass.to(self.device)
-        
         self.x = x
         self.y_multiclass = y_multiclass
         self.kernel = kernel
@@ -60,9 +61,12 @@ class svm_model_torch:
             for k in range(self.n_svm):
                 y = self.cast(y_multiclass, k)
                 index, _ = torch.where(y!=0)
-                print("k=",k)
-                s = time.time()
-                traverse = [i for i in range(0, len(index)-1, 2)] + [len(index)-2]
+                index = index[torch.randperm(index.size()[0])]
+                traverse = []
+                if index is not None:
+                    traverse = [i for i in range(0, len(index)-1, 2)]
+                    if len(index)>2:
+                         traverse += [len(index)-2]
                 for i in traverse:
                     y1 = y[index[i],0]
                     y2 = y[index[i+1],0]
@@ -73,10 +77,9 @@ class svm_model_torch:
                     logit = (y1 != y2).float()
                     H = torch.min(self.C, logit*self.C + a2_old + (1-2*logit)*a1_old)
                     L = torch.max(zero, a2_old+(1-2*logit)*a1_old + (logit-1)*self.C)        
-
-                    E1 =  torch.matmul(torch.matmul(x1,x.T)**2, (y * a[k,:].view(-1,1))) + b[k,0]-y1
-                    E2 = torch.matmul(torch.matmul(x2,x.T)**2, (y * a[k,:].view(-1,1))) + b[k,0]-y2
-
+                    E1 =  torch.matmul(kernel(x1,x), (y * a[k,:].view(-1,1))) + b[k,0]-y1
+                    E2 = torch.matmul(kernel(x2,x), (y * a[k,:].view(-1,1))) + b[k,0]-y2
+                    
                     a2_new = torch.clamp(a2_old + y2 * (E1-E2)/self.kernel(x1 - x2,x1 - x2), min=L, max=H)
                     a[k,index[i+1]] = a2_new
                     a1_new = a1_old - y1 * y2 * (a2_new - a2_old)
@@ -94,8 +97,7 @@ class svm_model_torch:
                         b[k,0] = b2_new
                     if ((a1_new ==zero) |(a1_new ==self.C)) & ((a2_new ==zero) |(a2_new==self.C)) & (L!=H):
                         b[k,0] = (b1_new + b2_new)/two
-                t = time.time()
-                print(t-s)
+
                 
     def predict(self,x_np):
         x = torch.from_numpy(x_np).float().to(self.device)
