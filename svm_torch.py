@@ -5,7 +5,8 @@ class svm_model_torch:
     def __init__(self, m, C, n_class):
         self.n_svm = n_class * (n_class - 1)//2
         self.m = m # number of samples
-        self.C = C # box constraint
+        self.C = torch.tensor(C,dtype=torch.float32) # box constraint
+        self.n_class = n_class
         
         # multiplier
         self.a = torch.zeros((self.n_svm,self.m)) # SMO works only when a is initialized to 0
@@ -15,7 +16,7 @@ class svm_model_torch:
         # kernel function  should input x [n,d] y [m,d] output [n,m]
         # Example of poly kernel: lambda x,y:  torch.matmul(x,y.T)**2
         self.kernel = lambda x,y:  torch.matmul(x,y.T)
-        self.n_class = n_class
+        
         
         # Binary setting for every SVM, 
         # Mij says the SVMj should give 
@@ -51,6 +52,10 @@ class svm_model_torch:
         self.x = x
         self.y_multiclass = y_multiclass
         self.kernel = kernel
+        a = self.a
+        b = self.b
+        zero = torch.tensor(0,device=self.device, dtype=torch.float32)
+        two = torch.tensor(2,device=self.device, dtype=torch.float32)
         for iteration in range(iterations):
             for k in range(self.n_svm):
                 y = self.cast(y_multiclass, k)
@@ -63,41 +68,35 @@ class svm_model_torch:
                     y2 = y[index[i+1],0]
                     x1 = x[index[i],:].view(1,-1)
                     x2 = x[index[i+1],:].view(1,-1)
-                    a1_old = self.a[k,index[i]].clone()
-                    a2_old = self.a[k,index[i+1]].clone()
+                    a1_old = a[k,index[i]].clone()
+                    a2_old = a[k,index[i+1]].clone()
                     if y1 != y2:
-                        H = max(min(self.C, (self.C + a2_old-a1_old).item()),0)
-                        L = min(max(0, (a2_old-a1_old).item()),self.C)
-
+                        H = torch.min(self.C, self.C + a2_old-a1_old)
+                        L = torch.max(zero, a2_old-a1_old)
                     else:
-                        H = max(min(self.C, (a2_old + a1_old).item()),0)
-                        L = min(max(0, (a2_old + a1_old - self.C).item()),self.C)
+                        H = torch.min(self.C, a2_old + a1_old)
+                        L = torch.max(zero, a2_old + a1_old - self.C)
 
                     E1 = self.error_k(k, x1, y1)
                     E2 = self.error_k(k, x2, y2)
 
-                    dx = x1 - x2
-                    kappa = self.kernel(dx,dx)
-                    delta = y2 * (E1-E2)/kappa
-                    
-                    a2_new_unclip = a2_old + delta
-                    a2_new = torch.clamp(a2_new_unclip, min=L, max=H)
-                    self.a[k,index[i+1]] = a2_new
+                    a2_new = torch.clamp(a2_old + y2 * (E1-E2)/self.kernel(x1 - x2,x1 - x2), min=L, max=H)
+                    a[k,index[i+1]] = a2_new
                     a1_new = a1_old - y1 * y2 * (a2_new - a2_old)
-                    self.a[k, index[i]] = a1_new
+                    a[k, index[i]] = a1_new
                     
-                    b_old = self.b[k,0]
+                    b_old = b[k,0]
                     K11 = self.kernel(x1,x1)
                     K12 = self.kernel(x1,x2)
                     K22 = self.kernel(x2,x2)
                     b1_new = b_old - E1 + (a1_old-a1_new)*y1*K11+(a2_old-a2_new)*y2*K12
                     b2_new = b_old - E2 + (a1_old-a1_new)*y1*K12+(a2_old-a2_new)*y2*K22
-                    if 0<a1_new<self.C:
-                        self.b[k,0] = b1_new
-                    if 0<a2_new<self.C:
-                        self.b[k,0] = b2_new
-                    if a1_new in [0,self.C] and a2_new in [0,self.C] and L!=H:
-                        self.b[k,0] = (b1_new + b2_new)/2
+                    if (zero<a1_new) & (a1_new<self.C):
+                        b[k,0] = b1_new
+                    if (zero<a2_new) & (a2_new<self.C):
+                        b[k,0] = b2_new
+                    if ((a1_new ==zero) |(a1_new ==self.C)) & ((a2_new ==zero) |(a2_new==self.C)) & (L!=H):
+                        b[k,0] = (b1_new + b2_new)/two
                 t = time.time()
                 print(t-s)
                 
@@ -116,6 +115,7 @@ class svm_model_torch:
         self.a = self.a.to(device)
         self.lookup_class = self.lookup_class.to(device)
         self.lookup_matrix = self.lookup_matrix.to(device)
+        self.C = self.C.to(device)
         
     def cast(self, y, k):
         # cast the multiclass label of dataset to 
