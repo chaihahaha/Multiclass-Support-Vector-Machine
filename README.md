@@ -44,4 +44,5 @@ svm.fit(data_x,data_y,1)
 print(svm.predict(data_x))
 svm.get_svms()
 print(svm.a)
+print(svm.get_avg_pct_spt_vec()) # the theoretical upper bound of generalization error
 ```
