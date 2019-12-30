@@ -24,18 +24,19 @@ class svm_model_torch:
         
         # The two classes SVMi concerns, 
         # lookup_class[i]=[pos, neg]
-        self.lookup_class=dict()
+        self.lookup_class=torch.zeros((self.n_svm, 2))
         
         k=0
         for i in range(n_class-1):
             for j in range(i+1,n_class):
-                self.lookup_class[k]=[i,j]
+                self.lookup_class[k, 0]=i
+                self.lookup_class[k, 1]=j
                 k += 1
 
         for i in range(n_class):
             for j in range(self.n_svm):
-                if i in self.lookup_class[j]:
-                    if self.lookup_class[j][0]==i:
+                if i == self.lookup_class[j,0] or i == self.lookup_class[j,1]:
+                    if self.lookup_class[j, 0]==i:
                         self.lookup_matrix[i,j]=1.0
                     else:
                         self.lookup_matrix[i,j]=-1.0
@@ -58,10 +59,10 @@ class svm_model_torch:
                 s = time.time()
                 traverse = [i for i in range(0, len(index)-1, 2)] + [len(index)-2]
                 for i in traverse:
-                    y1 = y[index[i],0].clone()
-                    y2 = y[index[i+1],0].clone()
-                    x1 = x[index[i],:].clone().view(1,-1)
-                    x2 = x[index[i+1],:].clone().view(1,-1)
+                    y1 = y[index[i],0]
+                    y2 = y[index[i+1],0]
+                    x1 = x[index[i],:].view(1,-1)
+                    x2 = x[index[i+1],:].view(1,-1)
                     a1_old = self.a[k,index[i]].clone()
                     a2_old = self.a[k,index[i+1]].clone()
                     if y1 != y2:
@@ -113,12 +114,13 @@ class svm_model_torch:
         self.device = device
         self.b = self.b.to(device)
         self.a = self.a.to(device)
+        self.lookup_class = self.lookup_class.to(device)
         self.lookup_matrix = self.lookup_matrix.to(device)
         
     def cast(self, y, k):
         # cast the multiclass label of dataset to 
         # the pos/neg (with 0) where pos/neg are what SVMk concerns
-        return (y==self.lookup_class[k][0]).float() - (y==self.lookup_class[k][1]).float()
+        return (y==self.lookup_class[k, 0]).float() - (y==self.lookup_class[k, 1]).float()
         
     def g_k_nobias(self, k, xi):
         # The prediction of SVMk, xi[1,d]
@@ -140,7 +142,7 @@ class svm_model_torch:
     
     def get_svms(self):
         for k in range(self.n_svm):
-            sk = 'g' + str(self.lookup_class[k][0]) + str(self.lookup_class[k][1]) + '(x)='
+            sk = 'g' + str(self.lookup_class[k, 0].item()) + str(self.lookup_class[k, 1].item()) + '(x)='
             w = self.get_w(k)
             for i in range(w.shape[0]):
                 sk += "{:.3f}".format(w[i,0].item()) + ' x' + "{:d}".format(i) +' + '
