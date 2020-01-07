@@ -1,4 +1,4 @@
-%matplotlib inline
+from svm_torch import svm_model_torch
 import matplotlib.pyplot as plt
 from matplotlib.colors import ListedColormap
 import numpy as np
@@ -12,7 +12,7 @@ c = len(np.unique(data_y))
 svm = svm_model_torch(m,1,c)
 svm.fit(data_x,data_y,100)
 from mlxtend.plotting import plot_decision_regions
-x=np.linspace(-4,4,1000)
+x=np.linspace(-4,4,100)
 test_x = np.array(np.meshgrid(x,x)).T.reshape(-1,2)
 test_y = svm.predict(test_x).reshape(-1)
 scatter_kwargs = {'alpha': 0.0}
