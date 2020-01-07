@@ -103,7 +103,7 @@ class svm_model_torch:
         n_x = x.shape[0]
         k_predicts = torch.zeros((self.n_svm, n_x),device=self.device)
         for k in range(self.n_svm):
-            k_predicts[k,:] = self.g_k(k, x).view(1,-1)
+            k_predicts[k,:] = self.g_k(k, x).view(1,-1)>0
         result = torch.argmax(torch.matmul(self.lookup_matrix, k_predicts ),axis=0)
         return result.reshape(-1,1).numpy()
     
