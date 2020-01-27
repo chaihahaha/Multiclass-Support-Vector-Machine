@@ -69,7 +69,7 @@ class svm_model_cvxpy:
         n_x = x.shape[0]
         k_predicts = np.zeros((self.n_svm, n_x))
         for k in range(self.n_svm):
-            k_predicts[k,:] = (self.g_k(k, x).reshape(1,-1) > 0).astype(np.float32)
+            k_predicts[k,:] = self.g_k(k, x).reshape(1,-1)
         result = np.argmax(self.lookup_matrix @ k_predicts,axis=0)
         return result.reshape(-1,1)
         
