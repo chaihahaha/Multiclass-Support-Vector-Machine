@@ -68,7 +68,7 @@ class svm_model_cvxpy:
             y = self.y_matrix[k, :].view(-1,1)
             yx = y.to("cuda")*x
             G = kernel(yx, yx).to("cpu") # Gram matrix
-            G = G + torch.eye(G.shape[0])*1e-5
+            G = G + torch.eye(G.shape[0])*1e-5 # to make sure G is positive definite
             objective = cp.Maximize(cp.sum(self.a[k])-(1/2)*cp.quad_form(self.a[k], G))
             if not objective.is_dcp():
                 print("Not solvable!")
