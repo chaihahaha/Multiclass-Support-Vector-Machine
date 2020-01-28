@@ -74,7 +74,6 @@ class svm_model_cvxpy:
                 print("Not solvable!")
                 assert objective.is_dcp()
             constraints = [self.a[k] <= C, cp.sum(cp.multiply(self.a[k],y)) == 0] # box constraint
-            print(constraints)
             prob = cp.Problem(objective, constraints)
             result = prob.solve()
             x_pos = x[y[:,0]==1,:]
