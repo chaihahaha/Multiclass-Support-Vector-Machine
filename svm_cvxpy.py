@@ -1,5 +1,20 @@
 import numpy as np
 import cvxpy as cp
+def rbf(sigma=1):
+    def rbf_kernel(x1,x2,sigma):
+        m=len(x1)
+        n=len(x2)
+        d=x1.shape[1]
+        x1 = x1.reshape((m,1,d))
+        x2 = x2.reshape((1,n,d))
+        result = np.sum((x1-x2)**2,2)
+        result = np.exp(-result/(2*sigma**2))
+        return result
+    return lambda x1,x2: rbf_kernel(x1,x2,sigma)
+
+def poly(n=3):
+    return lambda x1,x2: (x1 @ x2.T)**n
+
 class svm_model_cvxpy:
     def __init__(self, m,n_class):
         self.n_svm = n_class * (n_class - 1)//2
@@ -13,8 +28,8 @@ class svm_model_cvxpy:
 
         
         # kernel function  should input x [n,d] y [m,d] output [n,m]
-        # Example of poly kernel: lambda x,y:  torch.matmul(x,y.T)**2
-        self.kernel = lambda x,y:  x @ y.T
+        # Example of poly kernel: rbf, poly
+        self.kernel = rbf(1)
         
         
         # Binary setting for every SVM, 
@@ -40,7 +55,7 @@ class svm_model_cvxpy:
                         self.lookup_matrix[i,j]=1.0
                     else:
                         self.lookup_matrix[i,j]=-1.0
-    def fit(self, x, y_multiclass, kernel=lambda x,y:  (x @ y.T)**3, C=0.001):
+    def fit(self, x, y_multiclass, kernel=rbf(1), C=0.001):
         y_multiclass=y_multiclass.reshape((-1,1))
         self.x = x
         self.y_multiclass = y_multiclass
@@ -80,7 +95,7 @@ class svm_model_cvxpy:
         
     
     def wTx(self,k,xi):
-        # The prediction of SVMk, xi[1,d]
+        # The prediction of SVMk without bias, xi[1,d]
         y = self.cast(self.y_multiclass, k)
         a = self.a[k].value.reshape(-1,1)
         wTx0 =  self.kernel(xi, self.x) @ (y * a)
@@ -100,3 +115,31 @@ class svm_model_cvxpy:
         # test error shouldn't be greater than it if traing converge
         a_matrix = np.stack([i.value for i in self.a],0)
         return np.sum((0.0<a_matrix) & (a_matrix<self.C)).astype(np.float32)/(self.n_svm*self.m)
+    
+import matplotlib.pyplot as plt
+from matplotlib.colors import ListedColormap
+import numpy as np
+from sklearn.datasets import make_classification
+colors = ['red','green','blue','yellow']
+data_x,data_y = make_classification(n_samples=100, n_features=2, n_informative=2, n_redundant=0,n_clusters_per_class=1, n_classes=4,class_sep=2)
+fig = plt.figure()
+fig = plt.scatter(data_x[:,0],data_x[:,1],c=data_y, cmap=ListedColormap(colors), marker='o')
+m = len(data_x)
+c = len(np.unique(data_y))
+svm = svm_model_cvxpy(m,c)
+svm.fit(data_x,data_y,rbf(1), 1e-3)
+from mlxtend.plotting import plot_decision_regions
+x=np.linspace(-4,4,100)
+test_x = np.array(np.meshgrid(x,x)).T.reshape(-1,2)
+test_y = svm.predict(test_x).reshape(-1)
+scatter_kwargs = {'alpha': 0.0}
+fig =plot_decision_regions(test_x, test_y, clf=svm,scatter_kwargs=scatter_kwargs)
+xx = np.linspace(-4,4,10)
+for i in range(svm.n_svm):
+
+    ak = svm.a[i].value.reshape(-1)
+    mask = (svm.C*0.0001< ak) & (ak<svm.C*(1-0.0001))
+    fig.scatter(data_x[mask, 0]+i/8, data_x[mask,1],marker=4)
+plt.show()
+
+print(np.sum(svm.predict(data_x).reshape(-1)==data_y)/len(data_y))
