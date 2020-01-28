@@ -1,10 +1,9 @@
 import numpy as np
 import cvxpy as cp
 class svm_model_cvxpy:
-    def __init__(self, m, C=0.1, n_class):
+    def __init__(self, m,n_class):
         self.n_svm = n_class * (n_class - 1)//2
         self.m = m # number of samples
-        self.C = C # box constraint
         self.n_class = n_class
         
         # multiplier
@@ -41,11 +40,12 @@ class svm_model_cvxpy:
                         self.lookup_matrix[i,j]=1.0
                     else:
                         self.lookup_matrix[i,j]=-1.0
-    def fit(self, x, y_multiclass, kernel=lambda x,y:  (x @ y.T)**3):
+    def fit(self, x, y_multiclass, kernel=lambda x,y:  (x @ y.T)**3, C=0.001):
         y_multiclass=y_multiclass.reshape((-1,1))
         self.x = x
         self.y_multiclass = y_multiclass
         self.kernel = kernel
+        self.C = C
         # weight
         self.w = np.zeros((self.n_svm,x.shape[1]))
         for k in range(self.n_svm):
@@ -58,7 +58,7 @@ class svm_model_cvxpy:
                 print("Not solvable!")
                 assert objective.is_dcp()
             
-            constraints = [self.a[k] <= self.C, cp.sum(cp.multiply(self.a[k],y)) == 0] # box constraint
+            constraints = [self.a[k] <= C, cp.sum(cp.multiply(self.a[k],y)) == 0] # box constraint
             prob = cp.Problem(objective, constraints)
             result = prob.solve()
             self.w[k,:] = self.get_w(k).reshape(-1)
@@ -109,3 +109,33 @@ class svm_model_cvxpy:
         # test error shouldn't be greater than it if traing converge
         a_matrix = np.stack([i.value for i in self.a],0)
         return np.sum((0.0<a_matrix) & (a_matrix<self.C)).astype(np.float32)/(self.n_svm*self.m)
+    
+
+import matplotlib.pyplot as plt
+from matplotlib.colors import ListedColormap
+import numpy as np
+from sklearn.datasets import make_classification
+data = load_iris()
+colors = ['red','green','blue','purple']
+data_x,data_y = make_classification(n_samples=100, n_features=2, n_informative=2, n_redundant=0,n_clusters_per_class=1, n_classes=4,class_sep=2)
+fig = plt.figure()
+fig = plt.scatter(data_x[:,0],data_x[:,1],c=data_y, cmap=ListedColormap(colors), marker='o')
+m = len(data_x)
+c = len(np.unique(data_y))
+svm = svm_model_cvxpy(m,c)
+svm.fit(data_x,data_y,lambda x,y:  (x @ y.T)**3, 0.001)
+from mlxtend.plotting import plot_decision_regions
+x=np.linspace(-4,4,100)
+test_x = np.array(np.meshgrid(x,x)).T.reshape(-1,2)
+test_y = svm.predict(test_x).reshape(-1)
+scatter_kwargs = {'alpha': 0.0}
+fig =plot_decision_regions(test_x, test_y, clf=svm,scatter_kwargs=scatter_kwargs)
+xx = np.linspace(-4,4,10)
+for i in range(svm.n_svm):
+
+    ak = svm.a[i].value.reshape(-1)
+    mask = (svm.C*0.0001< ak) & (ak<svm.C*(1-0.0001))
+    fig.scatter(data_x[mask, 0]+i/8, data_x[mask,1],marker=4)
+plt.show()
+
+print(np.sum(svm.predict(data_x).reshape(-1)==data_y)/len(data_y))
