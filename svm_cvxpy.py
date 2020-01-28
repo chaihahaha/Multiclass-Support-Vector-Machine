@@ -1,7 +1,7 @@
 import numpy as np
 import cvxpy as cp
 class svm_model_cvxpy:
-    def __init__(self, m, C, n_class):
+    def __init__(self, m, C=0.1, n_class):
         self.n_svm = n_class * (n_class - 1)//2
         self.m = m # number of samples
         self.C = C # box constraint
@@ -11,6 +11,7 @@ class svm_model_cvxpy:
         self.a = [cp.Variable(shape=(m,1),pos=True) for i in range(self.n_svm)]
         # bias
         self.b = np.zeros((self.n_svm,1))
+
         
         # kernel function  should input x [n,d] y [m,d] output [n,m]
         # Example of poly kernel: lambda x,y:  torch.matmul(x,y.T)**2
@@ -40,11 +41,13 @@ class svm_model_cvxpy:
                         self.lookup_matrix[i,j]=1.0
                     else:
                         self.lookup_matrix[i,j]=-1.0
-    def fit(self, x, y_multiclass, kernel=lambda x,y: x @ y.T):
+    def fit(self, x, y_multiclass, kernel=lambda x,y:  (x @ y.T)**3):
         y_multiclass=y_multiclass.reshape((-1,1))
         self.x = x
         self.y_multiclass = y_multiclass
         self.kernel = kernel
+        # weight
+        self.w = np.zeros((self.n_svm,x.shape[1]))
         for k in range(self.n_svm):
             print("training ",k,"th SVM in ",self.n_svm)
             y = self.cast(y_multiclass, k)
@@ -58,18 +61,18 @@ class svm_model_cvxpy:
             constraints = [self.a[k] <= self.C, cp.sum(cp.multiply(self.a[k],y)) == 0] # box constraint
             prob = cp.Problem(objective, constraints)
             result = prob.solve()
-            w = self.get_w(k)
+            self.w[k,:] = self.get_w(k).reshape(-1)
             x_pos = x[y[:,0]==1,:]
             x_neg = x[y[:,0]==-1,:]
-            b_min = np.min(self.kernel(w.T,x_pos)) if x_pos.shape[0]!=0 else 0
-            b_max = np.max(self.kernel(w.T,x_neg)) if x_neg.shape[0]!=0 else 0
+            b_min = np.min(self.kernel(self.w[k,:].reshape(1,-1),x_pos)) if x_pos.shape[0]!=0 else 0
+            b_max = np.max(self.kernel(self.w[k,:].reshape(1,-1),x_neg)) if x_neg.shape[0]!=0 else 0
             self.b[k,0] = (-1/2)*(b_min + b_max)
 
     def predict(self,x):
         n_x = x.shape[0]
         k_predicts = np.zeros((self.n_svm, n_x))
         for k in range(self.n_svm):
-            k_predicts[k,:] = self.g_k(k, x).reshape(1,-1)
+            k_predicts[k,:] =  self.g_k(k, x).reshape(1,-1) #self.kernel(x, self.w[k]).reshape(1,-1) + self.b[k,0].reshape(1,1)
         result = np.argmax(self.lookup_matrix @ k_predicts,axis=0)
         return result.reshape(-1,1)
         
@@ -106,36 +109,3 @@ class svm_model_cvxpy:
         # test error shouldn't be greater than it if traing converge
         a_matrix = np.stack([i.value for i in self.a],0)
         return np.sum((0.0<a_matrix) & (a_matrix<self.C)).astype(np.float32)/(self.n_svm*self.m)
-
-import matplotlib.pyplot as plt
-from matplotlib.colors import ListedColormap
-import numpy as np
-colors = ['red','green','blue','purple']
-data_x = np.array([[-2.2,1.5],[-2.4,2.1],[-1.1,1.6],[-1.2,2.3],[1.2,1.4],[1.1,2.1],[2.6,1.1],[2.2,2.1],[1.1,-1.4],[1.7,-2.2],[2.9,-1.3],[2.1,-2.8]])
-data_y = np.array([[0],[0],[0],[0],[1],[1],[1],[1],[2],[2],[2],[2]]).reshape(-1)
-fig = plt.figure()
-fig = plt.scatter(data_x[:,0],data_x[:,1],c=data_y, cmap=ListedColormap(colors), marker='o')
-m = len(data_x)
-c = len(np.unique(data_y))
-svm = svm_model_cvxpy(m,0.1,c)
-svm.fit(data_x,data_y,lambda x,y:  (x @ y.T))
-from mlxtend.plotting import plot_decision_regions
-x=np.linspace(-4,4,100)
-test_x = np.array(np.meshgrid(x,x)).T.reshape(-1,2)
-test_y = svm.predict(test_x).reshape(-1)
-scatter_kwargs = {'alpha': 0.0}
-fig =plot_decision_regions(test_x, test_y, clf=svm,scatter_kwargs=scatter_kwargs)
-xx = np.linspace(-4,4,10)
-for i in range(svm.n_svm):
-    w = svm.get_w(i)
-    if w[1,0]==0:
-        plt.axvline(x=(-svm.b[i,0]/w[0,0]).item())
-    else:
-        k = - w[0,0]/w[1,0]
-        b = - svm.b[i,0]/w[1,0]
-        fig.plot(xx,k*xx+b)
-        fig.axis([-4,4,-4,4])
-    ak = svm.a[i].value.reshape(-1)
-    mask = (0< ak) & (ak<svm.C)
-    fig.scatter(data_x[mask, 0]+i/8, data_x[mask,1],marker=4)
-plt.show()
