@@ -116,7 +116,7 @@ from matplotlib.colors import ListedColormap
 import numpy as np
 from sklearn.datasets import make_classification
 data = load_iris()
-colors = ['red','green','blue','purple']
+colors = ['red','green','blue','yellow']
 data_x,data_y = make_classification(n_samples=100, n_features=2, n_informative=2, n_redundant=0,n_clusters_per_class=1, n_classes=4,class_sep=2)
 fig = plt.figure()
 fig = plt.scatter(data_x[:,0],data_x[:,1],c=data_y, cmap=ListedColormap(colors), marker='o')
