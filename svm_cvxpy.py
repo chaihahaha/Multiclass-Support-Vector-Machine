@@ -54,14 +54,15 @@ class svm_model_cvxpy:
                     else:
                         self.lookup_matrix[i,j]=-1.0
     def fit(self, x, y_multiclass, kernel=rbf(1), C=0.001):
-        y_multiclass=y_multiclass.reshape((-1,1))
+        y_multiclass=y_multiclass.reshape(-1)
         self.x = x
         self.y_multiclass = y_multiclass
         self.kernel = kernel
         self.C = C
+        self.y_matrix = np.stack([self.cast(y_multiclass, k) for k in range(self.n_svm)],0)
         for k in range(self.n_svm):
             print("training ",k,"th SVM in ",self.n_svm)
-            y = self.cast(y_multiclass, k)
+            y = self.y_matrix[k, :].reshape((-1,1))
             yx = y*x
             G = kernel(yx, yx) # Gram matrix
             objective = cp.Maximize(cp.sum(self.a[k])-(1/2)*cp.quad_form(self.a[k], G))
@@ -76,14 +77,12 @@ class svm_model_cvxpy:
             b_min = -np.min(self.wTx(k,x_pos)) if x_pos.shape[0]!=0 else 0
             b_max = -np.max(self.wTx(k,x_neg)) if x_neg.shape[0]!=0 else 0
             self.b[k,0] = (1/2)*(b_min + b_max)
+        self.a_matrix = np.stack([i.value.reshape(-1) for i in self.a],0)
 
-    def predict(self,x):
-        n_x = x.shape[0]
-        k_predicts = np.zeros((self.n_svm, n_x))
-        for k in range(self.n_svm):
-            k_predicts[k,:] =  self.wTx(k, x).reshape(1,-1)  + self.b[k,0]
+    def predict(self,xp):
+        k_predicts = (self.y_matrix * self.a_matrix) @ self.kernel(xp,self.x).T  + self.b
         result = np.argmax(self.lookup_matrix @ k_predicts,axis=0)
-        return result.reshape(-1,1)
+        return result
         
     def cast(self, y, k):
         # cast the multiclass label of dataset to 
@@ -92,7 +91,7 @@ class svm_model_cvxpy:
         
     def wTx(self,k,xi):
         # The prediction of SVMk without bias, w^T @ xi
-        y = self.cast(self.y_multiclass, k)
+        y = self.y_matrix[k, :].reshape((-1,1))
         a = self.a[k].value.reshape(-1,1)
         wTx0 =  self.kernel(xi, self.x) @ (y * a)
         return wTx0
@@ -100,8 +99,7 @@ class svm_model_cvxpy:
     def get_avg_pct_spt_vec(self):
         # the average percentage of support vectors, 
         # test error shouldn't be greater than it if traing converge
-        a_matrix = np.stack([i.value for i in self.a],0)
-        return np.sum((0.0<a_matrix) & (a_matrix<self.C)).astype(np.float32)/(self.n_svm*self.m)
+        return np.sum((0.0<self.a_matrix) & (self.a_matrix<self.C)).astype(np.float32)/(self.n_svm*self.m)
     
 import matplotlib.pyplot as plt
 from matplotlib.colors import ListedColormap
