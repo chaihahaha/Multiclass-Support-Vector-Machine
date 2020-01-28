@@ -70,9 +70,9 @@ class svm_model_cvxpy:
             G = kernel(yx, yx).to("cpu") # Gram matrix
             G = G + torch.eye(G.shape[0])*1e-5
             objective = cp.Maximize(cp.sum(self.a[k])-(1/2)*cp.quad_form(self.a[k], G))
-#             if not objective.is_dcp():
-#                 print("Not solvable!")
-#                 assert objective.is_dcp()
+            if not objective.is_dcp():
+                print("Not solvable!")
+                assert objective.is_dcp()
             constraints = [self.a[k] <= C, cp.sum(cp.multiply(self.a[k],y)) == 0] # box constraint
             print(constraints)
             prob = cp.Problem(objective, constraints)
