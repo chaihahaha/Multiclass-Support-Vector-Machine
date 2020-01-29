@@ -6,7 +6,7 @@ This is a multiclass SVM implmented on Tensorflow, Pytorch, cvxpy by Shitong CHA
 
 The cvxpy version with sparse matrix is super efficient for memory.
 
-### Use increase_dims() to increase the dimension of input features
+You can use increase_dims() to increase the dimension of input features for Tensorflow version.
 
 ### Example of Tensorflow version
 ```python
