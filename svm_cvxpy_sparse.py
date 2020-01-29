@@ -6,10 +6,13 @@ def rbf(sigma=1):
         m=x1.shape[0]
         n=x2.shape[0]
         d=x1.shape[1]
-        x1 = x1.reshape((m,1,d))
-        x2 = x2.reshape((1,n,d))
-        result = np.sum((x1-x2)**2,2)
-        result = np.exp(-result/(2*sigma**2))
+        result = sparse.lil_matrix(np.zeros((m,n)))
+        for i in range(m):
+            for j in range(n):
+                substraction = x1[i,:] - x2[j,:]
+                if sparse.issparse(substraction):
+                    substraction = substraction.A
+                result[i,j] = np.exp(-np.sum(substraction**2)/(2*sigma**2))
         return result
     return lambda x1,x2: rbf_kernel(x1,x2,sigma)
 
@@ -66,11 +69,11 @@ class svm_model_cvxpy:
         del ys
         for k in range(self.n_svm):
             print("training ",k,"th SVM in ",self.n_svm)
-            y = self.y_matrix[k, :].reshape((-1,1)).tocsr()
-            yx = y.multiply(x)
+            y = self.y_matrix[k, :].reshape((-1,1))#.tocsr()
+            yx = y.multiply(x).tolil()
             G = kernel(yx, yx) # Gram matrix
             
-            compensate = (sparse.eye(self.m)*1e-4).astype(np.float64)
+            compensate = (sparse.eye(self.m)*1e-5).astype(np.float64)
             G = (G + compensate)
             objective = cp.Maximize(cp.sum(self.a[k])-(1/2)*cp.quad_form(self.a[k], G))
             
