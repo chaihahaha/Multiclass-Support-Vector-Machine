@@ -6,7 +6,7 @@ def rbf(sigma=1):
         m=x1.shape[0]
         n=x2.shape[0]
         d=x1.shape[1]
-        result = sparse.lil_matrix(np.zeros((m,n)))
+        result = sparse.lil_matrix((m,n))
         for i in range(m):
             for j in range(n):
                 substraction = x1[i,:] - x2[j,:]
