@@ -1,6 +1,10 @@
 # Multiclass Support Vector Machine Tensorflow
 
-This is a multiclass SVM implmented on Tensorflow by Shitong CHAI. Copyright Reserved.
+This is a multiclass SVM implmented on Tensorflow, Pytorch, cvxpy by Shitong CHAI. Copyright Reserved.
+
+### FYI
+
+The cvxpy version with sparse matrix is super efficient for memory.
 
 ### Use increase_dims() to increase the dimension of input features
 
@@ -46,3 +50,20 @@ svm.get_svms()
 print(svm.a)
 print(svm.get_avg_pct_spt_vec()) # the theoretical upper bound of generalization error
 ```
+
+### Example of Sparse matrix cvxpy SVM
+```python
+import numpy as np
+from svm_cvxpy_sparse import *
+data_x = np.array([[-1,0],[1,0],[0,1]])
+data_y = np.array([[0],[1],[2]])
+m = len(data_x)
+c = len(np.unique(data_y))
+svm = svm_model_cvxpy(m,c)
+svm.fit(data_x,data_y, kernel=poly(3), C=1e-3)
+
+print(svm.predict(data_x))
+print(svm.a)
+print(svm.get_avg_pct_spt_vec()) # the theoretical upper bound of generalization error
+```
+
