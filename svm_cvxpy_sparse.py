@@ -1,18 +1,15 @@
 import numpy as np
-from scipy import sparse
+import sparse
 import cvxpy as cp
 def rbf(sigma=1):
     def rbf_kernel(x1,x2,sigma):
         m=x1.shape[0]
         n=x2.shape[0]
         d=x1.shape[1]
-        result = sparse.lil_matrix((m,n))
-        for i in range(m):
-            for j in range(n):
-                substraction = x1[i,:] - x2[j,:]
-                if sparse.issparse(substraction):
-                    substraction = substraction.A
-                result[i,j] = np.exp(-np.sum(substraction**2)/(2*sigma**2))
+        x1 = x1.reshape((m,1,d))
+        x2 = x2.reshape((1,n,d))
+        result = np.sum((x1-x2)**2,2)
+        result = np.exp(-result/(2*sigma**2))
         return result
     return lambda x1,x2: rbf_kernel(x1,x2,sigma)
 
@@ -64,13 +61,13 @@ class svm_model_cvxpy:
         self.y_multiclass = y_multiclass
         self.kernel = kernel
         self.C = C
-        ys = [sparse.csr_matrix(self.cast(y_multiclass, k)) for k in range(self.n_svm)]
-        self.y_matrix = sparse.vstack(ys)
+        ys = [sparse.COO(self.cast(y_multiclass, k)) for k in range(self.n_svm)]
+        self.y_matrix = sparse.stack(ys,0)
         del ys
         for k in range(self.n_svm):
             print("training ",k,"th SVM in ",self.n_svm)
-            y = self.y_matrix[k, :].reshape((-1,1))#.tocsr()
-            yx = y.multiply(x).tolil()
+            y = self.y_matrix[k, :].reshape((-1,1))
+            yx = sparse.COO.broadcast_to(y,x.shape)*x
             G = kernel(yx, yx) # Gram matrix
             
             compensate = (sparse.eye(self.m)*1e-5).astype(np.float64)
@@ -80,19 +77,19 @@ class svm_model_cvxpy:
             if not objective.is_dcp():
                 print("Not solvable!")
                 assert objective.is_dcp()
-            constraints = [self.a[k] <= C, cp.sum(cp.multiply(self.a[k],y)) == 0] # box constraint
+            constraints = [self.a[k] <= C, cp.sum(cp.multiply(self.a[k],y.todense())) == 0] # box constraint
             prob = cp.Problem(objective, constraints)
             result = prob.solve()
-            x_pos = x[y.A[:,0]==1,:]
-            x_neg = x[y.A[:,0]==-1,:]
+            x_pos = x[y.todense()[:,0]==1,:]
+            x_neg = x[y.todense()[:,0]==-1,:]
             b_min = -np.min(self.wTx(k,x_pos)) if x_pos.shape[0]!=0 else 0
             b_max = -np.max(self.wTx(k,x_neg)) if x_neg.shape[0]!=0 else 0
             self.b[k,0] = (1/2)*(b_min + b_max)
         self.a_matrix = np.stack([i.value.reshape(-1) for i in self.a],0)
-        self.a_matrix = sparse.csr_matrix(self.a_matrix)
+        self.a_matrix = sparse.COO(self.a_matrix)
 
     def predict(self,xp):
-        k_predicts = (self.y_matrix.multiply(self.a_matrix)) @ self.kernel(xp,self.x).T  + self.b
+        k_predicts = (self.y_matrix * self.a_matrix) @ self.kernel(xp,self.x).T  + self.b
         result = np.argmax(self.lookup_matrix @ k_predicts,axis=0)
         return result
         
@@ -105,13 +102,10 @@ class svm_model_cvxpy:
         # The prediction of SVMk without bias, w^T @ xi
         y = self.y_matrix[k, :].reshape((-1,1))
         a = self.a[k].value.reshape(-1,1)
-        wTx0 =  self.kernel(xi, self.x) @ (y.multiply(a))
+        wTx0 =  self.kernel(xi, self.x) @ (y*a)
         return wTx0
      
     def get_avg_pct_spt_vec(self):
         # the average percentage of support vectors, 
         # test error shouldn't be greater than it if traing converge
-        b1 = (0.0==self.a_matrix)
-        b2 = self.a_matrix==self.C
-        logical = b1+b2
-        return 1-np.sum(logical).astype(np.float64)/(self.n_svm*self.m)
+        return 1-np.sum((0.0 < self.a_matrix) & (self.a_matrix < self.C)).astype(np.float64)/(self.n_svm*self.m)
