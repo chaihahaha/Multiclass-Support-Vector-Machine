@@ -56,7 +56,7 @@ class svm_model_cvxpy:
                         self.lookup_matrix[i,j]=-1.0
     def fit(self, x, y_multiclass, kernel=rbf(1), C=0.001):
         y_multiclass=y_multiclass.reshape(-1).astype(np.float64)
-        self.x = x.astype(np.double)
+        self.x = x.astype(np.float64)
         self.m = len(x)
         self.y_multiclass = y_multiclass
         self.kernel = kernel
