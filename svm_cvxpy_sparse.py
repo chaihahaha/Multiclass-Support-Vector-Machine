@@ -1,17 +1,7 @@
 import numpy as np
 import sparse
 import cvxpy as cp
-def rbf(sigma=1):
-    def rbf_kernel(x1,x2,sigma):
-        m=x1.shape[0]
-        n=x2.shape[0]
-        d=x1.shape[1]
-        x1 = x1.reshape((m,1,d))
-        x2 = x2.reshape((1,n,d))
-        result = np.sum((x1-x2)**2,2)
-        result = np.exp(-result/(2*sigma**2))
-        return result
-    return lambda x1,x2: rbf_kernel(x1,x2,sigma)
+import sys
 
 def poly(n=3):
     return lambda x1,x2: (x1 @ x2.T)**n
@@ -21,25 +11,25 @@ class svm_model_cvxpy:
         self.n_svm = n_class * (n_class - 1)//2
         self.m = m # number of samples
         self.n_class = n_class
-        
+
         # multiplier
         self.a = [cp.Variable(shape=(m,1),pos=True) for i in range(self.n_svm)]
         # bias
         self.b = np.zeros((self.n_svm,1))
 
         # kernel function  should input x [n,d] y [m,d] output [n,m]
-        # Example of kernels: rbf(1.0), poly(3)
-        self.kernel = rbf(1)
-        
-        # Binary setting for every SVM, 
-        # Mij says the SVMj should give 
+        # Example of kernels: poly(3)
+        self.kernel = poly(1)
+
+        # Binary setting for every SVM,
+        # Mij says the SVMj should give
         # Mij label to sample with class i
         self.lookup_matrix=np.zeros((self.n_class, self.n_svm))
-        
-        # The two classes SVMi concerns, 
+
+        # The two classes SVMi concerns,
         # lookup_class[i]=[pos, neg]
         self.lookup_class=np.zeros((self.n_svm, 2))
-        
+
         k=0
         for i in range(n_class-1):
             for j in range(i+1,n_class):
@@ -54,10 +44,10 @@ class svm_model_cvxpy:
                         self.lookup_matrix[i,j]=1.0
                     else:
                         self.lookup_matrix[i,j]=-1.0
-    def fit(self, x, y_multiclass, kernel=rbf(1), C=0.001):
+    def fit(self, x, y_multiclass, kernel=poly(1), C=0.001):
         y_multiclass=y_multiclass.reshape(-1).astype(np.float64)
-        self.x = x.astype(np.float64)
-        self.m = len(x)
+        self.x = sparse.COO(x.astype(np.float64))
+        self.m = self.x.shape[0]
         self.y_multiclass = y_multiclass
         self.kernel = kernel
         self.C = C
@@ -67,13 +57,13 @@ class svm_model_cvxpy:
         for k in range(self.n_svm):
             print("training ",k,"th SVM in ",self.n_svm)
             y = self.y_matrix[k, :].reshape((-1,1))
-            yx = sparse.COO.broadcast_to(y,x.shape)*x
+            yx = y * self.x
             G = kernel(yx, yx) # Gram matrix
-            
-            compensate = (sparse.eye(self.m)*1e-5).astype(np.float64)
+
+            compensate = (sparse.eye(self.m)*1e-7).astype(np.float64)
             G = (G + compensate)
-            objective = cp.Maximize(cp.sum(self.a[k])-(1/2)*cp.quad_form(self.a[k], G))
-            
+            objective = cp.Maximize(cp.sum(self.a[k])-(1/2)*cp.quad_form(self.a[k], G.tocsr()))
+
             if not objective.is_dcp():
                 print("Not solvable!")
                 assert objective.is_dcp()
@@ -92,20 +82,36 @@ class svm_model_cvxpy:
         k_predicts = (self.y_matrix * self.a_matrix) @ self.kernel(xp,self.x).T  + self.b
         result = np.argmax(self.lookup_matrix @ k_predicts,axis=0)
         return result
-        
+
     def cast(self, y, k):
-        # cast the multiclass label of dataset to 
+        # cast the multiclass label of dataset to
         # the pos/neg (with 0) where pos/neg are what SVMk concerns
         return (y==self.lookup_class[k, 0]).astype(np.float64) - (y==self.lookup_class[k, 1]).astype(np.float64)
-        
+
     def wTx(self,k,xi):
         # The prediction of SVMk without bias, w^T @ xi
         y = self.y_matrix[k, :].reshape((-1,1))
         a = self.a[k].value.reshape(-1,1)
         wTx0 =  self.kernel(xi, self.x) @ (y*a)
         return wTx0
-     
+
     def get_avg_pct_spt_vec(self):
-        # the average percentage of support vectors, 
+        # the average percentage of support vectors,
         # test error shouldn't be greater than it if traing converge
         return 1-np.sum((0.0 < self.a_matrix) & (self.a_matrix < self.C)).astype(np.float64)/(self.n_svm*self.m)
+data_x = np.loadtxt('TrainSamples.csv',delimiter=',').astype(np.float32)
+data_y = np.loadtxt('TrainLabels.csv',delimiter=',').astype(np.float32).reshape(-1)
+data_size=len(data_y)
+print(data_size)
+m = 10000
+train_x = data_x[:m]/np.max(data_x)
+train_y = data_y[:m]
+c = len(np.unique(train_y))
+svm = svm_model_cvxpy(m,c)
+svm.fit(train_x,train_y, kernel=poly(3), C=1e-3) # 5000 poly(3) 1e-6
+print(svm.get_avg_pct_spt_vec())
+test_x = data_x[-2000:]
+test_y = data_y[-2000:]
+px=test_x/np.max(data_x)
+py=test_y
+print(np.sum(svm.predict(px).reshape(-1)==py.reshape(-1))/len(py.reshape(-1)))
