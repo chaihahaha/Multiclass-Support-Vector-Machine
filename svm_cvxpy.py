@@ -2,14 +2,8 @@ import numpy as np
 import cvxpy as cp
 def rbf(sigma=1):
     def rbf_kernel(x1,x2,sigma):
-        m=len(x1)
-        n=len(x2)
-        d=x1.shape[1]
-        x1 = x1.reshape((m,1,d))
-        x2 = x2.reshape((1,n,d))
-        result = np.sum((x1-x2)**2,2)
-        result = np.exp(-result/(2*sigma**2))
-        return result
+        X12norm = np.sum(x1**2,1,keepdims=True)-2*x1@x2.T+np.sum(x2**2,1,keepdims=True).T
+        return np.exp(-X12norm/(2*sigma**2))
     return lambda x1,x2: rbf_kernel(x1,x2,sigma)
 
 def poly(n=3):
@@ -20,7 +14,7 @@ class svm_model_cvxpy:
         self.n_svm = n_class * (n_class - 1)//2
         self.m = m # number of samples
         self.n_class = n_class
-        
+
         # multiplier
         self.a = [cp.Variable(shape=(m,1),pos=True) for i in range(self.n_svm)]
         # bias
@@ -29,16 +23,16 @@ class svm_model_cvxpy:
         # kernel function  should input x [n,d] y [m,d] output [n,m]
         # Example of kernels: rbf(1.0), poly(3)
         self.kernel = rbf(1)
-        
-        # Binary setting for every SVM, 
-        # Mij says the SVMj should give 
+
+        # Binary setting for every SVM,
+        # Mij says the SVMj should give
         # Mij label to sample with class i
         self.lookup_matrix=np.zeros((self.n_class, self.n_svm))
-        
-        # The two classes SVMi concerns, 
+
+        # The two classes SVMi concerns,
         # lookup_class[i]=[pos, neg]
         self.lookup_class=np.zeros((self.n_svm, 2))
-        
+
         k=0
         for i in range(n_class-1):
             for j in range(i+1,n_class):
@@ -83,24 +77,24 @@ class svm_model_cvxpy:
         k_predicts = (self.y_matrix * self.a_matrix) @ self.kernel(xp,self.x).T  + self.b
         result = np.argmax(self.lookup_matrix @ k_predicts,axis=0)
         return result
-        
+
     def cast(self, y, k):
-        # cast the multiclass label of dataset to 
+        # cast the multiclass label of dataset to
         # the pos/neg (with 0) where pos/neg are what SVMk concerns
         return (y==self.lookup_class[k, 0]).astype(np.float32) - (y==self.lookup_class[k, 1]).astype(np.float32)
-        
+
     def wTx(self,k,xi):
         # The prediction of SVMk without bias, w^T @ xi
         y = self.y_matrix[k, :].reshape((-1,1))
         a = self.a[k].value.reshape(-1,1)
         wTx0 =  self.kernel(xi, self.x) @ (y * a)
         return wTx0
-     
+
     def get_avg_pct_spt_vec(self):
-        # the average percentage of support vectors, 
+        # the average percentage of support vectors,
         # test error shouldn't be greater than it if traing converge
         return np.sum((0.0<self.a_matrix) & (self.a_matrix<self.C)).astype(np.float32)/(self.n_svm*self.m)
-    
+
 import matplotlib.pyplot as plt
 from matplotlib.colors import ListedColormap
 import numpy as np
