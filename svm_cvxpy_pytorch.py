@@ -6,24 +6,11 @@ def rbf(sigma=1):
         return torch.exp(-X12norm/(2*sigma**2))
     return lambda x1,x2: rbf_kernel(x1,x2,sigma)
 
-
-#def rbf(sigma=1):
-#    def rbf_kernel(x1,x2,sigma):
-#        m=len(x1)
-#        n=len(x2)
-#        d=x1.shape[1]
-#        x1 = x1.reshape((m,1,d))
-#        x2 = x2.view(1,n,d)
-#        result = torch.sum((x1-x2)**2,2)
-#        result = torch.exp(-result/(2*sigma**2))
-#        return result
-#    return lambda x1,x2: rbf_kernel(x1,x2,sigma)
-
 def poly(n=3):
     return lambda x1,x2: (x1 @ x2.T)**n
 
 class svm_model_cvxpy:
-    def __init__(self, m,n_class, dv):
+    def __init__(self, m,n_class, dv="cpu"):
         self.n_svm = n_class * (n_class - 1)//2
         self.m = m # number of samples
         self.n_class = n_class
