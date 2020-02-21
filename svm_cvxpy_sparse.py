@@ -99,19 +99,3 @@ class svm_model_cvxpy:
         # the average percentage of support vectors,
         # test error shouldn't be greater than it if traing converge
         return 1-np.sum((0.0 < self.a_matrix) & (self.a_matrix < self.C)).astype(np.float64)/(self.n_svm*self.m)
-data_x = np.loadtxt('TrainSamples.csv',delimiter=',').astype(np.float32)
-data_y = np.loadtxt('TrainLabels.csv',delimiter=',').astype(np.float32).reshape(-1)
-data_size=len(data_y)
-print(data_size)
-m = 10000
-train_x = data_x[:m]/np.max(data_x)
-train_y = data_y[:m]
-c = len(np.unique(train_y))
-svm = svm_model_cvxpy(m,c)
-svm.fit(train_x,train_y, kernel=poly(3), C=1e-3) # 5000 poly(3) 1e-6
-print(svm.get_avg_pct_spt_vec())
-test_x = data_x[-2000:]
-test_y = data_y[-2000:]
-px=test_x/np.max(data_x)
-py=test_y
-print(np.sum(svm.predict(px).reshape(-1)==py.reshape(-1))/len(py.reshape(-1)))
