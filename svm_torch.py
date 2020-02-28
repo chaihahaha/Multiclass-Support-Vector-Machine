@@ -54,6 +54,7 @@ class svm_model_torch:
                         self.lookup_matrix[i,j]=-1.0
 
     def fit(self, x_np, y_multiclass_np, C, iterations=1, kernel=rbf(1)):
+        x_np, y_multiclass_np = shuffle_ds(x_np,y_multiclass_np)
         self.C = C # box constraint
         # use SMO algorithm to fit
         x = torch.from_numpy(x_np).float() if not torch.is_tensor(x_np) else x_np
