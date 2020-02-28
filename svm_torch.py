@@ -1,5 +1,7 @@
 import torch
+import numpy as np
 from random import shuffle
+from sklearn.utils import shuffle as shuffle_ds
 def rbf(sigma=1):
     def rbf_kernel(x1,x2,sigma):
         X12norm = torch.sum(x1**2,1,keepdims=True)-2*x1@x2.T+torch.sum(x2**2,1,keepdims=True).T
@@ -55,11 +57,12 @@ class svm_model_torch:
         self.C = C # box constraint
         # use SMO algorithm to fit
         x = torch.from_numpy(x_np).float() if not torch.is_tensor(x_np) else x_np
+        x = x.to(self.device)
         self.x = x.to(self.device)
 
         y_multiclass = torch.from_numpy(y_multiclass_np).view(-1,1) if not torch.is_tensor(y_multiclass_np) else y_multiclass_np
         y_multiclass=y_multiclass.view(-1)
-        self.y_matrix = torch.stack([self.cast(y_multiclass, k) for k in range(self.n_svm)],0)
+        self.y_matrix = torch.stack([self.cast(y_multiclass, k) for k in range(self.n_svm)],0).to(self.device)
         self.kernel = kernel
         a = self.a
         b = self.b
@@ -156,4 +159,3 @@ class svm_model_torch:
         # the average percentage of support vectors,
         # test error shouldn't be greater than it if traing converge
         return torch.sum((0.0<self.a) & (self.a<self.C)).float().item()/(self.n_svm*self.m)
-
