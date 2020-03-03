@@ -115,6 +115,7 @@ class svm_model_torch:
                             b[k,0] = (b1_new + b2_new)/2
                         if b_old == b[k,0] and a[k,index[i]] == a1_old and a[k,index[i+1]] == a2_old:
                             self.blacklist[k].add(str(index[i]) + str(index[i+1]))
+                            self.blacklist[k].add(str(index[i+1]) + str(index[i]))
 
     def predict(self,x_np):
         xp = torch.from_numpy(x_np) if not torch.is_tensor(x_np) else x_np
