@@ -2,9 +2,7 @@ import numpy as np
 import sparse
 import cvxpy as cp
 import sys
-
-def poly(n=3):
-    return lambda x1,x2: (x1 @ x2.T)**n
+from kernels import rbf, poly, grpf
 
 class svm_model_cvxpy:
     def __init__(self, m,n_class):

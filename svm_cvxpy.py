@@ -1,14 +1,6 @@
 import numpy as np
 import cvxpy as cp
-def rbf(sigma=1):
-    def rbf_kernel(x1,x2,sigma):
-        X12norm = np.sum(x1**2,1,keepdims=True)-2*x1@x2.T+np.sum(x2**2,1,keepdims=True).T
-        return np.exp(-X12norm/(2*sigma**2))
-    return lambda x1,x2: rbf_kernel(x1,x2,sigma)
-
-def poly(n=3):
-    return lambda x1,x2: (x1 @ x2.T)**n
-
+from kernels import rbf, poly, grpf
 class svm_model_cvxpy:
     def __init__(self, m,n_class):
         self.n_svm = n_class * (n_class - 1)//2

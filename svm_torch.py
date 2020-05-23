@@ -1,14 +1,6 @@
 import torch
 from random import shuffle
-def rbf(sigma=1):
-    def rbf_kernel(x1,x2,sigma):
-        X12norm = torch.sum(x1**2,1,keepdims=True)-2*x1@x2.T+torch.sum(x2**2,1,keepdims=True).T
-        return torch.exp(-X12norm/(2*sigma**2))
-    return lambda x1,x2: rbf_kernel(x1,x2,sigma)
-
-def poly(n=3):
-    return lambda x1,x2: (x1 @ x2.T)**n
-
+from kernels import rbf, poly, grpf
 class svm_model_torch:
     def __init__(self, m, n_class, device="cpu"):
         self.device = device
@@ -137,20 +129,6 @@ class svm_model_torch:
         # The prediction of SVMk, xi[1,d]
         return self.wTx(k,xi) + self.b[k,0].view(1,1)
 
-
-    def get_w(self, k):
-        y = self.cast(self.y_multiclass, k)
-        a = self.a[k,:].view(-1,1)
-        return torch.sum(a*y*self.x,0).view(-1,1)
-
-    def get_svms(self):
-        for k in range(self.n_svm):
-            sk = 'g' + str(self.lookup_class[k, 0].item()) + str(self.lookup_class[k, 1].item()) + '(x)='
-            w = self.get_w(k)
-            for i in range(w.shape[0]):
-                sk += "{:.3f}".format(w[i,0].item()) + ' x' + "{:d}".format(i) +' + '
-            sk += "{:.3f}".format(self.b[k,0].item())
-            print(sk)
 
     def get_avg_pct_spt_vec(self):
         # the average percentage of support vectors,

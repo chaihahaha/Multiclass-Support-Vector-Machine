@@ -1,14 +1,6 @@
 import torch
 import cvxpy as cp
-def rbf(sigma=1):
-    def rbf_kernel(x1,x2,sigma):
-        X12norm = torch.sum(x1**2,1,keepdims=True)-2*x1@x2.T+torch.sum(x2**2,1,keepdims=True).T
-        return torch.exp(-X12norm/(2*sigma**2))
-    return lambda x1,x2: rbf_kernel(x1,x2,sigma)
-
-def poly(n=3):
-    return lambda x1,x2: (x1 @ x2.T)**n
-
+from kernels import rbf, poly, grpf
 class svm_model_cvxpy:
     def __init__(self, m,n_class, dv="cpu"):
         self.n_svm = n_class * (n_class - 1)//2
