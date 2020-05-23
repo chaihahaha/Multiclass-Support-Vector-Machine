@@ -1,6 +1,16 @@
 import torch
+import numpy as np
 from random import shuffle
-from kernels import rbf, poly, grpf
+from sklearn.utils import shuffle as shuffle_ds
+def rbf(sigma=1):
+    def rbf_kernel(x1,x2,sigma):
+        X12norm = torch.sum(x1**2,1,keepdims=True)-2*x1@x2.T+torch.sum(x2**2,1,keepdims=True).T
+        return torch.exp(-X12norm/(2*sigma**2))
+    return lambda x1,x2: rbf_kernel(x1,x2,sigma)
+
+def poly(n=3):
+    return lambda x1,x2: (x1 @ x2.T)**n
+
 class svm_model_torch:
     def __init__(self, m, n_class, device="cpu"):
         self.device = device
@@ -44,14 +54,16 @@ class svm_model_torch:
                         self.lookup_matrix[i,j]=-1.0
 
     def fit(self, x_np, y_multiclass_np, C, iterations=1, kernel=rbf(1)):
+        x_np, y_multiclass_np = shuffle_ds(x_np,y_multiclass_np)
         self.C = C # box constraint
         # use SMO algorithm to fit
         x = torch.from_numpy(x_np).float() if not torch.is_tensor(x_np) else x_np
+        x = x.to(self.device)
         self.x = x.to(self.device)
 
         y_multiclass = torch.from_numpy(y_multiclass_np).view(-1,1) if not torch.is_tensor(y_multiclass_np) else y_multiclass_np
         y_multiclass=y_multiclass.view(-1)
-        self.y_matrix = torch.stack([self.cast(y_multiclass, k) for k in range(self.n_svm)],0)
+        self.y_matrix = torch.stack([self.cast(y_multiclass, k) for k in range(self.n_svm)],0).to(self.device)
         self.kernel = kernel
         a = self.a
         b = self.b
@@ -103,6 +115,7 @@ class svm_model_torch:
                             b[k,0] = (b1_new + b2_new)/2
                         if b_old == b[k,0] and a[k,index[i]] == a1_old and a[k,index[i+1]] == a2_old:
                             self.blacklist[k].add(str(index[i]) + str(index[i+1]))
+                            self.blacklist[k].add(str(index[i+1]) + str(index[i]))
 
     def predict(self,x_np):
         xp = torch.from_numpy(x_np) if not torch.is_tensor(x_np) else x_np
@@ -130,8 +143,21 @@ class svm_model_torch:
         return self.wTx(k,xi) + self.b[k,0].view(1,1)
 
 
+    def get_w(self, k):
+        y = self.cast(self.y_multiclass, k)
+        a = self.a[k,:].view(-1,1)
+        return torch.sum(a*y*self.x,0).view(-1,1)
+
+    def get_svms(self):
+        for k in range(self.n_svm):
+            sk = 'g' + str(self.lookup_class[k, 0].item()) + str(self.lookup_class[k, 1].item()) + '(x)='
+            w = self.get_w(k)
+            for i in range(w.shape[0]):
+                sk += "{:.3f}".format(w[i,0].item()) + ' x' + "{:d}".format(i) +' + '
+            sk += "{:.3f}".format(self.b[k,0].item())
+            print(sk)
+
     def get_avg_pct_spt_vec(self):
         # the average percentage of support vectors,
         # test error shouldn't be greater than it if traing converge
         return torch.sum((0.0<self.a) & (self.a<self.C)).float().item()/(self.n_svm*self.m)
-
