@@ -1,11 +1,10 @@
-import torch
 import numpy as np
 from random import shuffle
 from sklearn.utils import shuffle as shuffle_ds
 def rbf(sigma=1):
     def rbf_kernel(x1,x2,sigma):
-        X12norm = torch.sum(x1**2,1,keepdims=True)-2*x1@x2.T+torch.sum(x2**2,1,keepdims=True).T
-        return torch.exp(-X12norm/(2*sigma**2))
+        X12norm = np.sum(x1**2,1,keepdims=True)-2*x1@x2.T+np.sum(x2**2,1,keepdims=True).T
+        return np.exp(-X12norm/(2*sigma**2))
     return lambda x1,x2: rbf_kernel(x1,x2,sigma)
 
 def poly(n=3):
@@ -14,32 +13,31 @@ def poly(n=3):
 def grpf(sigma, d):
     return lambda x1,x2: ((d + 2*rbf(sigma)(x1,x2))/(2 + d))**(d+1)
 
-class svm_model_torch:
-    def __init__(self, m, n_class, device="cpu"):
-        self.device = device
+class svm_model_np:
+    def __init__(self, m, n_class):
         self.n_svm = n_class * (n_class - 1)//2
         self.m = m # number of samples
         self.n_class = n_class
         self.blacklist = [set() for i in range(self.n_svm)]
 
         # multiplier
-        self.a = torch.zeros((self.n_svm,self.m), device=self.device) # SMO works only when a is initialized to 0
+        self.a = np.zeros((self.n_svm,self.m)) # SMO works only when a is initialized to 0
         # bias
-        self.b = torch.zeros((self.n_svm,1), device=self.device)
+        self.b = np.zeros((self.n_svm,1))
 
         # kernel function  should input x [n,d] y [m,d] output [n,m]
-        # Example of poly kernel: lambda x,y:  torch.matmul(x,y.T)**2
-        self.kernel = lambda x,y:  torch.matmul(x,y.T)
+        # Example of poly kernel: lambda x,y:  np.matmul(x,y.T)**2
+        self.kernel = lambda x,y:  np.matmul(x,y.T)
 
 
         # Binary setting for every SVM,
         # Mij says the SVMj should give
         # Mij label to sample with class i
-        self.lookup_matrix=torch.zeros((self.n_class, self.n_svm), device=self.device)
+        self.lookup_matrix=np.zeros((self.n_class, self.n_svm))
 
         # The two classes SVMi concerns,
         # lookup_class[i]=[pos, neg]
-        self.lookup_class=torch.zeros((self.n_svm, 2), device=self.device)
+        self.lookup_class=np.zeros((self.n_svm, 2))
 
         k=0
         for i in range(n_class-1):
@@ -56,24 +54,21 @@ class svm_model_torch:
                     else:
                         self.lookup_matrix[i,j]=-1.0
 
-    def fit(self, x_np, y_multiclass_np, C, iterations=1, kernel=rbf(1)):
-        x_np, y_multiclass_np = shuffle_ds(x_np,y_multiclass_np)
+    def fit(self, x, y_multiclass_np, C, iterations=1, kernel=rbf(1)):
+        x, y_multiclass_np = shuffle_ds(x,y_multiclass_np)
         self.C = C # box constraint
         # use SMO algorithm to fit
-        x = torch.from_numpy(x_np).float() if not torch.is_tensor(x_np) else x_np
-        x = x.to(self.device)
-        self.x = x.to(self.device)
+        self.x = x
 
-        y_multiclass = torch.from_numpy(y_multiclass_np).view(-1,1) if not torch.is_tensor(y_multiclass_np) else y_multiclass_np
-        y_multiclass=y_multiclass.view(-1)
-        self.y_matrix = torch.stack([self.cast(y_multiclass, k) for k in range(self.n_svm)],0).to(self.device)
+        y_multiclass=y_multiclass_np.reshape(-1)
+        self.y_matrix = np.stack([self.cast(y_multiclass, k) for k in range(self.n_svm)],0)
         self.kernel = kernel
         a = self.a
         b = self.b
         for iteration in range(iterations):
             print("Iteration: ",iteration)
             for k in range(self.n_svm):
-                y = self.y_matrix[k, :].view(-1).tolist()
+                y = self.y_matrix[k, :].reshape(-1).tolist()
                 index = [i for i in range(len(y)) if y[i]!=0]
                 shuffle(index)
                 traverse = []
@@ -85,10 +80,10 @@ class svm_model_torch:
                     if str(index[i])+str(index[i+1]) not in self.blacklist[k]:
                         y1 = y[index[i]]
                         y2 = y[index[i+1]]
-                        x1 = x[index[i],:].view(1,-1)
-                        x2 = x[index[i+1],:].view(1,-1)
-                        a1_old = a[k,index[i]].clone()
-                        a2_old = a[k,index[i+1]].clone()
+                        x1 = x[index[i],:].reshape(1,-1)
+                        x2 = x[index[i+1],:].reshape(1,-1)
+                        a1_old = a[k,index[i]].copy()
+                        a2_old = a[k,index[i+1]].copy()
 
                         if y1 != y2:
                             H = max(min(self.C, (self.C + a2_old-a1_old).item()),0)
@@ -98,7 +93,7 @@ class svm_model_torch:
                             L = min(max(0, (a2_old + a1_old - self.C).item()),self.C)
                         E1 =  self.g_k(k, x1) - y1
                         E2 =  self.g_k(k, x2) - y2
-                        a2_new = torch.clamp(a2_old + y2 * (E1-E2)/self.kernel(x1 - x2,x1 - x2), min=L, max=H)
+                        a2_new = np.clip(a2_old + y2 * (E1-E2)/self.kernel(x1 - x2,x1 - x2), a_min=L, a_max=H)
                         a[k,index[i+1]] = a2_new
 
                         a1_new = a1_old - y1 * y2 * (a2_new - a2_old)
@@ -120,36 +115,34 @@ class svm_model_torch:
                             self.blacklist[k].add(str(index[i]) + str(index[i+1]))
                             self.blacklist[k].add(str(index[i+1]) + str(index[i]))
 
-    def predict(self,x_np):
-        xp = torch.from_numpy(x_np) if not torch.is_tensor(x_np) else x_np
-        xp = xp.float().to(self.device)
-        k_predicts = (self.y_matrix.to(self.device) * self.a) @ self.kernel(xp,self.x).T  + self.b
-        result = torch.argmax(self.lookup_matrix @ k_predicts,axis=0)
-        return result.to("cpu").numpy()
+    def predict(self,xp):
+        k_predicts = (self.y_matrix * self.a) @ self.kernel(xp,self.x).T  + self.b
+        result = np.argmax(self.lookup_matrix @ k_predicts,axis=0)
+        return result
 
     def cast(self, y, k):
         # cast the multiclass label of dataset to
         # the pos/neg (with 0) where pos/neg are what SVMk concerns
-        return (y==self.lookup_class[k, 0]).float() - (y==self.lookup_class[k, 1]).float()
+        return (y==self.lookup_class[k, 0]).astype(float) - (y==self.lookup_class[k, 1]).astype(float)
 
 
     def wTx(self,k,xi):
         # The prediction of SVMk without bias, w^T @ xi
         y = self.y_matrix[k, :].reshape((-1,1))
-        a = self.a[k,:].view(-1,1)
+        a = self.a[k,:].reshape(-1,1)
         wTx0 =  self.kernel(xi, self.x) @ (y * a)
         return wTx0
 
 
     def g_k(self,k,xi):
         # The prediction of SVMk, xi[1,d]
-        return self.wTx(k,xi) + self.b[k,0].view(1,1)
+        return self.wTx(k,xi) + self.b[k,0].reshape(1,1)
 
 
     def get_w(self, k):
         y = self.cast(self.y_multiclass, k)
-        a = self.a[k,:].view(-1,1)
-        return torch.sum(a*y*self.x,0).view(-1,1)
+        a = self.a[k,:].reshape(-1,1)
+        return np.sum(a*y*self.x,0).reshape(-1,1)
 
     def get_svms(self):
         for k in range(self.n_svm):
@@ -163,4 +156,4 @@ class svm_model_torch:
     def get_avg_pct_spt_vec(self):
         # the average percentage of support vectors,
         # test error shouldn't be greater than it if traing converge
-        return torch.sum((0.0<self.a) & (self.a<self.C)).float().item()/(self.n_svm*self.m)
+        return np.sum((0.0<self.a) & (self.a<self.C))/(self.n_svm*self.m)
