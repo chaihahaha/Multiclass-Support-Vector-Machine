@@ -146,20 +146,6 @@ class svm_model_torch:
         return self.wTx(k,xi) + self.b[k,0].view(1,1)
 
 
-    def get_w(self, k):
-        y = self.cast(self.y_multiclass, k)
-        a = self.a[k,:].view(-1,1)
-        return torch.sum(a*y*self.x,0).view(-1,1)
-
-    def get_svms(self):
-        for k in range(self.n_svm):
-            sk = 'g' + str(self.lookup_class[k, 0].item()) + str(self.lookup_class[k, 1].item()) + '(x)='
-            w = self.get_w(k)
-            for i in range(w.shape[0]):
-                sk += "{:.3f}".format(w[i,0].item()) + ' x' + "{:d}".format(i) +' + '
-            sk += "{:.3f}".format(self.b[k,0].item())
-            print(sk)
-
     def get_avg_pct_spt_vec(self):
         # the average percentage of support vectors,
         # test error shouldn't be greater than it if traing converge
